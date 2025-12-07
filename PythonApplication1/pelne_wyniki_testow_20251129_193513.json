@@ -1,0 +1,17 @@
+[
+  {
+    "test_id": "failed_test_1",
+    "error": "array must not contain infs or NaNs",
+    "success": false
+  },
+  {
+    "test_id": "failed_test_2",
+    "error": "array must not contain infs or NaNs",
+    "success": false
+  },
+  {
+    "test_id": "failed_test_3",
+    "error": "array must not contain infs or NaNs",
+    "success": false
+  }
+]

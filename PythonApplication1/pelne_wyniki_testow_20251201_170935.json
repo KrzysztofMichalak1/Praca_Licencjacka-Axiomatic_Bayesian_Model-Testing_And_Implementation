@@ -1,0 +1,17 @@
+[
+  {
+    "test_id": "failed_test_1",
+    "error": "'BayesianFieldModel' object has no attribute 'std_devs'",
+    "success": false
+  },
+  {
+    "test_id": "failed_test_2",
+    "error": "'BayesianFieldModel' object has no attribute 'std_devs'",
+    "success": false
+  },
+  {
+    "test_id": "failed_test_3",
+    "error": "'BayesianFieldModel' object has no attribute 'std_devs'",
+    "success": false
+  }
+]

@@ -1,0 +1,125 @@
+[
+  {
+    "test_id": 1,
+    "metrics_bayesian": {
+      "MSE": 4.940468164343931e-07,
+      "MAE": 0.00048499655585934414,
+      "RMSE": 0.0007028846394924227,
+      "Correlation": 0.3810749307807587,
+      "Covariance": 1.3036484610533028e-07
+    },
+    "metrics_dirichlet": {
+      "MSE": 4.3766444787853326e-07,
+      "MAE": 0.0005202821712848791,
+      "RMSE": 0.000661562126998314,
+      "Correlation": 0.3896740740453212,
+      "Covariance": 1.2459496863684286e-07
+    },
+    "metrics_gp": {
+      "MSE": 1.253878472422552e-06,
+      "MAE": 0.0008697721483693771,
+      "RMSE": 0.0011197671509838784,
+      "Correlation": 0.38967407403097665,
+      "Covariance": 2.2115606943438357e-07
+    },
+    "metrics_spatial": {
+      "MSE": 7.584745870856189e-07,
+      "MAE": 0.0006511150417817531,
+      "RMSE": 0.0008709044649590556,
+      "Correlation": 0.4639068428615778,
+      "Covariance": 2.1286877667105696e-07
+    },
+    "comparison_stats": {
+      "bayesian_better_count": 372,
+      "dirichlet_better_count": 231,
+      "gp_better_count": 39,
+      "spatial_better_count": 133,
+      "equal_count": 0,
+      "wilcoxon_pvalue": 0.001075409654462283
+    },
+    "duration": 38.402637,
+    "success": true
+  },
+  {
+    "test_id": 1,
+    "metrics_bayesian": {
+      "MSE": 7.212072386093942e-07,
+      "MAE": 0.0005201719180838832,
+      "RMSE": 0.0008492392116532269,
+      "Correlation": 0.32417407266010273,
+      "Covariance": 1.3268897637046653e-07
+    },
+    "metrics_dirichlet": {
+      "MSE": 4.528764069638079e-07,
+      "MAE": 0.0005366901947782573,
+      "RMSE": 0.0006729609252874998,
+      "Correlation": 0.3610218850991979,
+      "Covariance": 1.1492879182220438e-07
+    },
+    "metrics_gp": {
+      "MSE": 1.2752458952238442e-06,
+      "MAE": 0.0009065623893237804,
+      "RMSE": 0.0011292678580495613,
+      "Correlation": 0.361021885002575,
+      "Covariance": 2.039986053832555e-07
+    },
+    "metrics_spatial": {
+      "MSE": 7.347878661388125e-07,
+      "MAE": 0.000673610367235143,
+      "RMSE": 0.0008571976820657021,
+      "Correlation": 0.4362338973644654,
+      "Covariance": 1.936307145254988e-07
+    },
+    "comparison_stats": {
+      "bayesian_better_count": 391,
+      "dirichlet_better_count": 227,
+      "gp_better_count": 25,
+      "spatial_better_count": 132,
+      "equal_count": 0,
+      "wilcoxon_pvalue": 1.609585909983748e-05
+    },
+    "duration": 78.088895,
+    "success": true
+  },
+  {
+    "test_id": 1,
+    "metrics_bayesian": {
+      "MSE": 7.563137696446897e-07,
+      "MAE": 0.0005012484276185913,
+      "RMSE": 0.000869663020741189,
+      "Correlation": 0.3268799136613483,
+      "Covariance": 1.3765882240320522e-07
+    },
+    "metrics_dirichlet": {
+      "MSE": 4.894893782338341e-07,
+      "MAE": 0.0005451252658394157,
+      "RMSE": 0.0006996351750975891,
+      "Correlation": 0.33241576910532233,
+      "Covariance": 1.0849080286223723e-07
+    },
+    "metrics_gp": {
+      "MSE": 1.3729099774443748e-06,
+      "MAE": 0.0009125162915663223,
+      "RMSE": 0.001171712412430787,
+      "Correlation": 0.3324157691107693,
+      "Covariance": 1.9257117518489454e-07
+    },
+    "metrics_spatial": {
+      "MSE": 7.943889109117635e-07,
+      "MAE": 0.0006890976626304762,
+      "RMSE": 0.0008912849773847663,
+      "Correlation": 0.4102847661480076,
+      "Covariance": 1.8665479950601776e-07
+    },
+    "comparison_stats": {
+      "bayesian_better_count": 388,
+      "dirichlet_better_count": 215,
+      "gp_better_count": 28,
+      "spatial_better_count": 144,
+      "equal_count": 0,
+      "wilcoxon_pvalue": 5.53185514989214e-07
+    },
+    "duration": 84.062512,
+    "success": true
+  }
+]

@@ -1,0 +1,43 @@
+[
+  {
+    "test_id": 1,
+    "metrics_bayesian": {
+      "MSE": 0.023146684866913618,
+      "MAE": 0.1152466645373729,
+      "RMSE": 0.1521403459537069,
+      "Correlation": 0.9106498004188303,
+      "Covariance": 1.965681502739666e-07
+    },
+    "metrics_dirichlet": {
+      "MSE": 0.015593027234690212,
+      "MAE": 0.09587193755725808,
+      "RMSE": 0.12487204344724327,
+      "Correlation": 0.9440609112302232,
+      "Covariance": 2.1520169193876592e-07
+    },
+    "metrics_gp": {
+      "MSE": 0.015593027234690212,
+      "MAE": 0.09587193755725808,
+      "RMSE": 0.12487204344724327,
+      "Correlation": 0.9440609112302232,
+      "Covariance": 2.1520169193876592e-07
+    },
+    "metrics_spatial": {
+      "MSE": 0.01095254604838848,
+      "MAE": 0.07903478541556992,
+      "RMSE": 0.10465441246497197,
+      "Correlation": 0.958829637968372,
+      "Covariance": 2.1197385201142317e-07
+    },
+    "comparison_stats": {
+      "bayesian_better_count": 273,
+      "dirichlet_better_count": 0,
+      "gp_better_count": 0,
+      "spatial_better_count": 302,
+      "equal_count": 200,
+      "wilcoxon_pvalue": 5.367981487556897e-05
+    },
+    "duration": 21.554338,
+    "success": true
+  }
+]

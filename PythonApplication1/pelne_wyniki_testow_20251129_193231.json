@@ -1,0 +1,17 @@
+[
+  {
+    "test_id": "failed_test_1",
+    "error": "'NoneType' object does not support item assignment",
+    "success": false
+  },
+  {
+    "test_id": "failed_test_2",
+    "error": "'NoneType' object does not support item assignment",
+    "success": false
+  },
+  {
+    "test_id": "failed_test_3",
+    "error": "'NoneType' object does not support item assignment",
+    "success": false
+  }
+]
