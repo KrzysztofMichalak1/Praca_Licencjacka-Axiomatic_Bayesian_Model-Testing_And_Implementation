@@ -83,7 +83,7 @@ def solve_lower_triangular(L, b):
 class BayesianFieldModel:
 
     def __init__(self, space_points, metric_func, observed_indices,
-                 lengthscale, variance, jitter, distance_unit='km'):
+                 lengthscale, variance, distance_unit='km'):
 
         print("\n▶ [MODEL] Inicjalizacja modelu...")
         self.space_points = list(space_points)
@@ -1242,7 +1242,7 @@ class TestManager:
         return self.cached_data
     
     def test(self, test_params, test_number=1, total_tests=1, 
-             test_models=None, save=False):
+             models_to_test=None, save=False):
         """
         Główna funkcja testująca
         
@@ -1254,14 +1254,9 @@ class TestManager:
             Numer testu
         total_tests : int
             Łączna liczba testów
-        test_models : dict
-            Słownik określający które modele testować:
-            {
-                'bayesian': True/False,
-                'dirichlet': True/False,
-                'gaussian': True/False,
-                'spatial': True/False
-            }
+        models_to_test : list
+            Lista krotek (nazwa_modelu, parametry_modelu) do przetestowania.
+            Np. [('bayesian', {'lengthscale': 1000}), ('dirichlet', {})]
         save : bool
             Czy zapisać wyniki do bazy danych
         """
@@ -1269,17 +1264,20 @@ class TestManager:
         print(f"▶ TEST {test_number}/{total_tests}")
         print(f"{'='*60}")
         
-        # Domyślne modele do testowania (wszystkie jeśli nie podano)
-        if test_models is None:
-            test_models = {
-                'bayesian': True,
-                'dirichlet': True,
-                'gaussian': False,  # Domyślnie wyłączony bo wolny
-                'spatial': True
-            }
+        # Domyślne modele do testowania, jeśli nie podano
+        if models_to_test is None:
+            models_to_test = [
+                ('bayesian', {
+                    'lengthscale': test_params['lengthscale'],
+                    'variance': test_params['variance'],
+                    'distance_unit': test_params.get('distance_unit', 'km')
+                }),
+                ('dirichlet', {}),
+                ('spatial', {'smoothing_factor': 0.1})
+            ]
         
         # Wyświetl jakie modele będą testowane
-        active_models = [name for name, active in test_models.items() if active]
+        active_models = [name for name, params in models_to_test]
         print(f"🎯 TESTOWANE MODELE: {', '.join(active_models)}")
         
         start_time = datetime.datetime.now()
@@ -1310,67 +1308,72 @@ class TestManager:
             predictions = {}
             metrics = {}
             models = {}
-            
-            # --- MODEL 1: BAYESIAN FIELD ---
-            if test_models.get('bayesian', False):
-                print(f"\n--- MODEL 1: BAYESIAN FIELD ---")
-                model_bayesian = BayesianFieldModel(
-                    points, haversine, obs_idx,
-                    test_params['lengthscale'], 
-                    test_params['variance'], 
-                    test_params['distance_unit']
-                )
-                model_bayesian.przygotuj_apriori()
-                model_bayesian.przygotuj_predykcyjny(
-                    num_samples=test_params['mcmc_samples'],
-                    burn_in=test_params['mcmc_burn'],
-                    proposal_scale=test_params['mcmc_scale'],
-                    seed=test_params['mcmc_seed'] + test_number
-                )
-                pred_bayesian = model_bayesian.posterior_mean()
-                predictions['bayesian'] = pred_bayesian
-                models['bayesian'] = model_bayesian
-                metrics['bayesian'] = oblicz_metryki(true_probs, pred_bayesian, 
-                                                   "Bayesian Field Model", verbose=True)
-            
-            # --- MODEL 2: DIRICHLET ---
-            if test_models.get('dirichlet', False):
-                print(f"\n--- MODEL 2: DIRICHLET ---")
-                model_dirichlet = DirichletModel(obs_idx, len(gdf))
-                pred_dirichlet = model_dirichlet.posterior_mean()
-                predictions['dirichlet'] = pred_dirichlet
-                models['dirichlet'] = model_dirichlet
-                metrics['dirichlet'] = oblicz_metryki(true_probs, pred_dirichlet, 
-                                                    "Dirichlet Model", verbose=True)
-            
-            # --- MODEL 3: GAUSSIAN PROCESS ---
-            if test_models.get('gaussian', False):
-                print(f"\n--- MODEL 3: BAYESIAN GAUSSIAN PROCESS ---")
-                model_gp = BayesianGaussianProcess(
-                    points, obs_idx,
-                    lengthscale_prior=(1000, 500),
-                    variance_prior=(2, 1)
-                )
-                model_gp.sample_posterior(n_samples=1000, burn_in=500, step_size=0.1)
-                pred_gp = model_gp.posterior_predictive()
-                predictions['gaussian'] = pred_gp
-                models['gaussian'] = model_gp
-                metrics['gaussian'] = oblicz_metryki(true_probs, pred_gp, 
-                                                   "Gaussian Process Model", verbose=True)
-            
-            # --- MODEL 4: SPATIAL SMOOTHING ---
-            if test_models.get('spatial', False):
-                print(f"\n--- MODEL 4: SPATIAL SMOOTHING ---")
-                model_spatial = BayesianSpatialSmoothing(
-                    points, obs_idx, smoothing_factor=0.1
-                )
-                pred_spatial = model_spatial.posterior_mean()
-                predictions['spatial'] = pred_spatial
-                models['spatial'] = model_spatial
-                metrics['spatial'] = oblicz_metryki(true_probs, pred_spatial, 
-                                                  "Spatial Smoothing Model", verbose=True)
-            
-            # Oblicz statystyki porównania
+
+            # Pętla po modelach do testowania
+            for model_name, model_params in models_to_test:
+                model_full_name = "Unknown"
+                
+                try:
+                    if model_name == 'bayesian':
+                        model_full_name = "Bayesian Field Model"
+                        print(f"\n--- MODEL: {model_full_name.upper()} ---")
+                        
+                        constructor_params = {
+                            'space_points': points,
+                            'metric_func': haversine,
+                            'observed_indices': obs_idx,
+                            **model_params
+                        }
+                        
+                        model = BayesianFieldModel(**constructor_params)
+                        model.przygotuj_apriori()
+                        model.przygotuj_predykcyjny(
+                            num_samples=test_params['mcmc_samples'],
+                            burn_in=test_params['mcmc_burn'],
+                            proposal_scale=test_params['mcmc_scale'],
+                            seed=test_params['mcmc_seed'] + test_number
+                        )
+                        pred = model.posterior_mean()
+
+                    elif model_name == 'dirichlet':
+                        model_full_name = "Dirichlet Model"
+                        print(f"\n--- MODEL: {model_full_name.upper()} ---")
+                        model = DirichletModel(obs_idx, len(gdf))
+                        pred = model.posterior_mean()
+
+                    elif model_name == 'gaussian':
+                        model_full_name = "Gaussian Process Model"
+                        print(f"\n--- MODEL: {model_full_name.upper()} ---")
+                        
+                        gp_params = {
+                            'lengthscale_prior': (1000, 500),
+                            'variance_prior': (2, 1),
+                            **model_params
+                        }
+                        
+                        model = BayesianGaussianProcess(points, obs_idx, **gp_params)
+                        model.sample_posterior(n_samples=1000, burn_in=500, step_size=0.1)
+                        pred = model.posterior_predictive()
+
+                    elif model_name == 'spatial':
+                        model_full_name = "Spatial Smoothing Model"
+                        print(f"\n--- MODEL: {model_full_name.upper()} ---")
+                        model = BayesianSpatialSmoothing(points, obs_idx, **model_params)
+                        pred = model.posterior_mean()
+                        
+                    else:
+                        print(f"⚠️ Nieznany model: {model_name}")
+                        continue
+                        
+                    predictions[model_name] = pred
+                    models[model_name] = model
+                    metrics[model_name] = oblicz_metryki(true_probs, pred, model_full_name, verbose=True)
+
+                except Exception as e:
+                    print(f"❌ Błąd podczas uruchamiania modelu {model_full_name}: {e}")
+                    import traceback
+                    traceback.print_exc()
+
             if len(predictions) >= 2:
                 comparison_stats = self._calculate_comparison_stats(
                     true_probs, predictions
@@ -1378,34 +1381,24 @@ class TestManager:
             else:
                 comparison_stats = {
                     'best_model': list(predictions.keys())[0] if predictions else None,
-                    'wilcoxon_pvalue': None
+                    'wilcoxon_pvalue': None,
+                    'better_counts': {},
+                    'equal_count': 0
                 }
             
-            # Czas trwania testu
             duration = (datetime.datetime.now() - start_time).total_seconds()
             
-            # Zapisz wyniki do bazy
             test_id = None
-            if save and len(metrics) >= 2:  # Zapisz tylko jeśli są co najmniej 2 modele
-                # Przygotuj dane do zapisu (konwersja do formatu zgodnego z bazą)
-                base_metrics = {
-                    'bayesian': metrics.get('bayesian', {}),
-                    'dirichlet': metrics.get('dirichlet', {}),
-                    'gaussian': metrics.get('gaussian', {}),
-                    'spatial': metrics.get('spatial', {})
-                }
-                test_id = self._save_to_database(test_params, base_metrics, 
+            if save and len(metrics) >= 2:
+                test_id = self._save_to_database(test_params, metrics, 
                                                comparison_stats, duration)
             
-            # Wyświetl podsumowanie testu
             self._print_test_summary(metrics, comparison_stats, duration)
             
-            # Stwórz mapy porównawcze dla pierwszego testu
             if test_number == 1:
                 for model_name, pred in predictions.items():
-                    if model_name in ['bayesian', 'dirichlet', 'spatial']:
-                        stworz_mape_porownawcza(gdf, true_probs, pred, 
-                                              f"{model_name.capitalize()} Model")
+                    stworz_mape_porownawcza(gdf, true_probs, pred, 
+                                          f"{model_name.capitalize()} Model")
                 pokaz_punkt_referencyjny(gdf, title="Punkt referencyjny (indeks 1)")
             
             return {
@@ -1553,7 +1546,7 @@ class TestManager:
         self.cached_data = None
         print("✅ Cache danych wyczyszczony")
     
-    def run_tests(self, base_params, n_tests=1, test_models=None, 
+    def run_tests(self, base_params, n_tests=1, models_to_test=None, 
                   varying_params=None, save=False):
         """
         Uruchamia serię testów
@@ -1564,8 +1557,8 @@ class TestManager:
             Bazowe parametry testów
         n_tests : int
             Liczba testów do uruchomienia
-        test_models : dict
-            Słownik określający które modele testować
+        models_to_test : list
+            Lista krotek (nazwa_modelu, parametry) do przetestowania.
         varying_params : dict
             Słownik z listami wartości do zmiany w kolejnych testach
         save : bool
@@ -1587,7 +1580,7 @@ class TestManager:
                     else:
                         test_params[param_name] = values[-1]
             
-            result = self.test(test_params, i+1, n_tests, test_models, save)
+            result = self.test(test_params, i+1, n_tests, models_to_test, save)
             all_results.append(result)
             
             # Przerwa między testami
@@ -1607,7 +1600,7 @@ class TestManager:
         return all_results
     
     def test_observation_length_impact(self, base_params, n_observations_list=None,
-                                     test_models=None, save=False):
+                                     models_to_test=None, save=False):
         
         if n_observations_list is None:
             n_observations_list = [100, 250, 500, 750, 1000, 1500, 2000, 
@@ -1638,7 +1631,7 @@ class TestManager:
             
             # Uruchom test
             result = self.test(test_params, i+1, len(n_observations_list), 
-                             test_models, save=False)  # Nie zapisuj do głównej bazy
+                             models_to_test, save=False)  # Nie zapisuj do głównej bazy
             
             if result['success']:
                 result['n_observations'] = n_obs
@@ -1973,22 +1966,25 @@ def convert_to_serializable(obj):
             return str(obj)
 #Uruchomienie programu
 # Przykład użycia
-def program(base_params, n_tests, csv_path, test_models=None, save=False,xd={"rt":False,"it":False}, impact_test_models=None):
+def program(base_params, n_tests, csv_path, models_to_test=None, save=False, xd={"rt":False,"it":False}, impact_models_to_test=None):
     print("================================================")
     print("🎯 SYSTEM TESTOWANIA MODELI BAYESOWSKICH")
     print("================================================")
     
-    # Domyślnie testuj tylko Bayesian i Dirichlet
-    if test_models is None:
-        test_models = {
-            'bayesian': True,
-            'dirichlet': True,
-            'gaussian': False,  # Gaussian Process domyślnie wyłączony
-            'spatial': True
-        }
+    # Domyślne modele do testowania, jeśli nie podano
+    if models_to_test is None:
+        models_to_test = [
+            ('bayesian', {
+                'lengthscale': base_params['lengthscale'],
+                'variance': base_params['variance'],
+                'distance_unit': base_params.get('distance_unit', 'km')
+            }),
+            ('dirichlet', {}),
+            ('spatial', {'smoothing_factor': 0.1})
+        ]
     
     # Wyświetl jakie modele będą testowane
-    active = [name for name, active in test_models.items() if active]
+    active = [name for name, params in models_to_test]
     print(f"TESTOWANE MODELE: {', '.join(active)}")
     print("================================================\n")
     
@@ -1998,44 +1994,34 @@ def program(base_params, n_tests, csv_path, test_models=None, save=False,xd={"rt
     print("🎯 ETAP 1: STANDARDOWE TESTY")
     if xd["rt"]:
         results = test_manager.run_tests(
-            base_params=base_params,
-            n_tests=n_tests,
-            test_models=test_models,
-            save=save
+            base_params, n_tests=n_tests, 
+            models_to_test=models_to_test, save=save
         )
-    else:
-        results=None
     
-    # 2. Badanie wpływu liczby obserwacji
-    print("\n🎯 ETAP 2: BADANIE WPŁYWU LICZBY OBSERWACJI")
-    if impact_test_models is None:
-    # Tylko podstawowe modele dla badania wpływu obserwacji
-        impact_test_models = {
-            'bayesian': True,
-            'dirichlet': True,
-            'gaussian': False,
-            'spatial': False
-        }
+    # 2. Test wpływu liczby obserwacji
+    print("\n🎯 ETAP 2: TEST WPŁYWU LICZBY OBSERWACJI")
     if xd["it"]:
-        impact_results = test_manager.test_observation_length_impact(
-            base_params=base_params,
-            test_models=impact_test_models,
-            save=False
-    )
+        if impact_models_to_test is None:
+            impact_models_to_test = [
+                ('bayesian', {
+                    'lengthscale': base_params['lengthscale'],
+                    'variance': base_params['variance'],
+                    'distance_unit': base_params.get('distance_unit', 'km')
+                }),
+                ('dirichlet', {}),
+                ('spatial', {'smoothing_factor': 0.1})
+            ]
+        
+        active_impact = [name for name, params in impact_models_to_test]
+        print(f"MODELE W TEŚCIE WPŁYWU: {', '.join(active_impact)}")
+        
+        test_manager.test_observation_length_impact(
+            base_params, models_to_test=impact_models_to_test, save=save
+        )
     
-    # Zapisz pełne wyniki
-    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    results_filename = f"pelne_wyniki_testow_{timestamp}.json"
-    if results is not None:
-        serializable_results = convert_to_serializable(results)
-    
-        with open(results_filename, 'w', encoding='utf-8') as f:
-            json.dump(serializable_results, f, indent=2, ensure_ascii=False)
-    
-    print(f"\n💾 Pełne wyniki zapisane do: {results_filename}")
-    print("\n" + "="*60)
-    print("✅ SYSTEM TESTOWANIA ZAKOŃCZONY")
-    print("="*60)
+    print("\n================================================")
+    print("✅ WSZYSTKIE TESTY ZAKOŃCZONE")
+    print("================================================")
 #endregion
 #Parametry
 if __name__ == "__main__":
@@ -2045,7 +2031,7 @@ if __name__ == "__main__":
         'cutoff_km': 1000,
         'co_ktory': 100,
         'n_observations': 50000,
-        'lengthscale': 500,
+        'lengthscale': 5000,
         'variance': 1.0,
         'distance_unit': "km",
         'mcmc_samples': 5000,
@@ -2056,17 +2042,5 @@ if __name__ == "__main__":
     }
     
     # Określ które modele testować
-    test_models = {
-        'bayesian': True,
-        'dirichlet': True,
-        'gaussian': False,
-        'spatial': True
-    }
-    impact_test_models = {
-        'bayesian': True,
-        'dirichlet': True,
-        'gaussian': False,
-        'spatial': True
-    }
     program(base_params, n_tests=2, csv_path=csv_path, 
-            test_models=test_models, save=False, xd={"rt":False,"it":True},impact_test_models=impact_test_models)
+            save=False, xd={"rt":False,"it":True})
