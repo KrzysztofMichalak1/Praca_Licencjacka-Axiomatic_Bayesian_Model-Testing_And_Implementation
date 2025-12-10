@@ -5,13 +5,13 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-from ..data.preprocessing import przygotuj_dane
+from ..Wczytywanie_danych.preprocessing import przygotuj_dane
 
-from ..data.loaders import losuj_obserwacje
+from ..Wczytywanie_danych.loaders import losuj_obserwacje
 
-from ..database.results_db import ResultsDatabase
+from ..Wyniki.results_db import ResultsDatabase
 
-from ..models import (
+from ..Modele import (
 
     BayesianFieldModel, 
 
@@ -27,11 +27,11 @@ from ..models import (
 
 )
 
-from ..utils.metrics import oblicz_metryki
+from ..Pomocnicze.metrics import oblicz_metryki
 
-from ..utils.visualization import stworz_mape_porownawcza, pokaz_punkt_referencyjny
+from ..Pomocnicze.visualization import stworz_mape_porownawcza, pokaz_punkt_referencyjny
 
-from ..data.metric import haversine
+from ..Wczytywanie_danych.metric import haversine
 
 class TestManager:
     """Manager for running multiple tests."""

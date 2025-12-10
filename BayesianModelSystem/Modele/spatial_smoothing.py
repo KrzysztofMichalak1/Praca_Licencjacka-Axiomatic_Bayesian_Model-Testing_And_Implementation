@@ -1,6 +1,6 @@
 """This module contains the BayesianSpatialSmoothing class."""
 import numpy as np
-from ..data.metric import haversine
+from ..Wczytywanie_danych.metric import haversine
 
 class BayesianSpatialSmoothing:
     """Simple Bayesian spatial smoothing model."""

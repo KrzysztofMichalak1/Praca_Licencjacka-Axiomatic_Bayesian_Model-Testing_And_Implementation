@@ -1,5 +1,5 @@
 """This module contains the main program logic."""
-from .testing.test_manager import TestManager
+from .TestMenager.test_manager import TestManager
 
 def program(base_params, n_tests, csv_path, models_to_test=None, save_results=False, run_options={"rt":False,"it":False}, impact_models_to_test=None):
     """Main program function."""

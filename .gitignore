@@ -191,7 +191,7 @@ publish/
 # checkin your Azure Web App publish settings, but sensitive information contained
 # in these scripts will be unencrypted
 PublishScripts/
-
+env1/
 # NuGet Packages
 *.nupkg
 # NuGet Symbol Packages
@@ -267,7 +267,7 @@ ServiceFabricBackup/
 *.ndf
 
 # Business Intelligence projects
-*.rdl.data
+*.rdl.Wczytywanie_danych
 *.bim.layout
 *.bim_*.settings
 *.rptproj.rsuser

@@ -1,7 +1,7 @@
 """This module contains the BayesianGaussianProcess class."""
 import numpy as np
 import scipy.linalg as la
-from ..data.metric import haversine
+from ..Wczytywanie_danych.metric import haversine
 
 class BayesianGaussianProcess:
     """Bayesian Gaussian Process model for comparison."""
