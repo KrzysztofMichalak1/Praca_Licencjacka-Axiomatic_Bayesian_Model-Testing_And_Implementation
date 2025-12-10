@@ -1,0 +1,658 @@
+"This module contains the TestManager class for running tests."
+import datetime
+import json
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+
+from ..data.preprocessing import przygotuj_dane
+
+from ..data.loaders import losuj_obserwacje
+
+from ..database.results_db import ResultsDatabase
+
+from ..models import (
+
+    BayesianFieldModel, 
+
+    BayesianFieldModelAdaptiveSearchBinary,
+
+    BayesianFieldModelCVGridSearch,
+
+    DirichletModel, 
+
+    BayesianGaussianProcess, 
+
+    BayesianSpatialSmoothing
+
+)
+
+from ..utils.metrics import oblicz_metryki
+
+from ..utils.visualization import stworz_mape_porownawcza, pokaz_punkt_referencyjny
+
+from ..data.metric import haversine
+
+class TestManager:
+    """Manager for running multiple tests."""
+    
+    def __init__(self, csv_path, db_path="wyniki_testow.csv"):
+        self.csv_path = csv_path
+        self.db = ResultsDatabase(db_path)
+        self.results = []
+        self.cached_data = None
+    
+    def prepare_data_once(self, cutoff_km, co_ktory, max_observations):
+        """Prepares data once and caches it."""
+        if self.cached_data is None:
+            print("▶ [DATA] Pierwsze przygotowanie danych...")
+            gdf, _, true_probs = przygotuj_dane(
+                self.csv_path, cutoff_km, co_ktory, max_observations
+            )
+            self.cached_data = {
+                'gdf': gdf,
+                'true_probs': true_probs,
+                'points': list(zip(gdf["Longitude"], gdf["Latitude"]))
+            }
+            print(f"  ✔ Dane zapisane w cache: {len(gdf)} punktów")
+        else:
+            print("▶ [DATA] Używam danych z cache")
+        
+        return self.cached_data
+    
+    def test(self, test_params, test_number=1, total_tests=1, 
+             models_to_test=None, save=False):
+        """
+        Main testing function.
+        """
+        print(f"\n{'='*60}")
+        print(f"▶ TEST {test_number}/{total_tests}")
+        print(f"{ '='*60}")
+        
+        if models_to_test is None:
+            models_to_test = [
+                ('bayesian', {
+                    'lengthscale': 500,
+                    'variance': 1.0,
+                    'distance_unit': "km",
+                    'mcmc_samples': 5000,
+                    'mcmc_burn': 3000,
+                    'mcmc_scale': 0.05,
+                    'mcmc_seed': 42
+                }),
+                ('dirichlet', {}),
+                ('spatial', {'smoothing_factor': 0.1})
+            ]
+        
+        active_models = [f"{name}_{i}" for i, (name, params) in enumerate(models_to_test)]
+        print(f"🎯 TESTOWANE MODELE: {', '.join(active_models)}")
+        
+        start_time = datetime.datetime.now()
+        
+        try:
+            if test_number == 1 or self.cached_data is None:
+                cached = self.prepare_data_once(
+                    test_params['cutoff_km'], 
+                    test_params['co_ktory'], 
+                    test_params['n_observations']
+                )
+            else:
+                cached = self.cached_data
+            
+            gdf = cached['gdf']
+            true_probs = cached['true_probs']
+            points = cached['points']
+            
+            test_params['n_points'] = len(gdf)
+            
+            print(f"▶ [OBS] Losowanie {test_params['n_observations']} obserwacji...")
+            obs_idx = losuj_obserwacje(gdf, test_params['n_observations'])
+            
+            predictions = {}
+            metrics = {}
+            models = {}
+
+            for i, (model_name, model_params) in enumerate(models_to_test):
+                unique_model_key = f"{model_name}_{i}"
+                model_display_name = f"{model_name.capitalize()} ({i})"
+                
+                try:
+                    if model_name == 'bayesian':
+                        print(f"\n--- MODEL: {model_display_name.upper()} ---")
+                        constructor_params = {
+                            'space_points': points, 'metric_func': haversine, 'observed_indices': obs_idx,
+                            'lengthscale': model_params.get('lengthscale', 500),
+                            'variance': model_params.get('variance', 1.0),
+                            'distance_unit': model_params.get('distance_unit', 'km')
+                        }
+                        model = BayesianFieldModel(**constructor_params)
+                        model.przygotuj_apriori()
+                        model.przygotuj_predykcyjny(
+                            num_samples=model_params.get('mcmc_samples', 5000),
+                            burn_in=model_params.get('mcmc_burn', 3000),
+                            proposal_scale=model_params.get('mcmc_scale', 0.05),
+                            seed=model_params.get('mcmc_seed', 42) + test_number
+                        )
+                        pred = model.posterior_mean()
+
+                    elif model_name == 'bayesian_adaptive_search_binary':
+                        print(f"\n--- MODEL: {model_display_name.upper()} ---")
+                        constructor_params = {
+                            'space_points': points, 'metric_func': haversine, 'observed_indices': obs_idx,
+                            'variance': model_params.get('variance', 1.0),
+                            'distance_unit': model_params.get('distance_unit', 'km'),
+                            'start_ls': model_params.get('start_ls', 1000),
+                            'step_size': model_params.get('step_size', 2000),
+                            'k_steps': model_params.get('k_steps', 3),
+                            'num_samples_search': model_params.get("num_samples_search", 100),
+                            'burn_in_search': model_params.get("burn_in_search", 50),
+                            'proposal_scale_search': model_params.get("proposal_scale_search", 0.05)
+                        }
+                        model = BayesianFieldModelAdaptiveSearchBinary(**constructor_params)
+                        model.przygotuj_apriori() # This will run the binary adaptive search
+                        model.przygotuj_predykcyjny(
+                            num_samples=model_params.get('mcmc_samples', 5000),
+                            burn_in=model_params.get('mcmc_burn', 3000),
+                            proposal_scale=model_params.get('mcmc_scale', 0.05),
+                            seed=model_params.get('mcmc_seed', 42) + test_number
+                        )
+                        pred = model.posterior_mean()
+                    elif model_name == 'bayesian_cv_gridsearch':
+                        print(f"\n--- MODEL: {model_display_name.upper()} ---")
+                        constructor_params = {
+                            'space_points': points, 'metric_func': haversine, 'observed_indices': obs_idx,
+                            'variance': model_params.get('variance', 1.0),
+                            'distance_unit': model_params.get('distance_unit', 'km'),
+                            'lengthscale_grid': model_params.get('lengthscale_grid'),
+                            'cv_k': model_params.get('cv_k', 5),
+                            'cv_mcmc_samples': model_params.get('cv_mcmc_samples', 1000),
+                            'cv_mcmc_burn': model_params.get('cv_mcmc_burn', 500)
+                        }
+                        model = BayesianFieldModelCVGridSearch(**constructor_params)
+                        model.przygotuj_apriori()
+                        model.przygotuj_predykcyjny(
+                            num_samples=model_params.get('mcmc_samples', 5000),
+                            burn_in=model_params.get('mcmc_burn', 3000),
+                            proposal_scale=model_params.get('mcmc_scale', 0.05),
+                            seed=model_params.get('mcmc_seed', 42) + test_number
+                        )
+                        pred = model.posterior_mean()
+                    elif model_name == 'dirichlet':
+                        print(f"\n--- MODEL: {model_display_name.upper()} ---")
+                        model = DirichletModel(obs_idx, len(gdf))
+                        pred = model.posterior_mean()
+
+                    elif model_name == 'gaussian':
+                        print(f"\n--- MODEL: {model_display_name.upper()} ---")
+                        gp_constructor_params = {
+                            'space_points': points, 'observed_indices': obs_idx,
+                            'lengthscale_prior': model_params.get('lengthscale_prior', (1000, 500)),
+                            'variance_prior': model_params.get('variance_prior', (2, 1))
+                        }
+                        model = BayesianGaussianProcess(**gp_constructor_params)
+                        model.sample_posterior(
+                            n_samples=model_params.get('n_samples', 1000),
+                            burn_in=model_params.get('burn_in', 500),
+                            step_size=model_params.get('step_size', 0.1)
+                        )
+                        pred = model.posterior_predictive()
+
+                    elif model_name == 'spatial':
+                        print(f"\n--- MODEL: {model_display_name.upper()} ---")
+                        model = BayesianSpatialSmoothing(
+                            points, obs_idx, smoothing_factor=model_params.get('smoothing_factor', 0.1)
+                        )
+                        pred = model.posterior_mean()
+                        
+                    else:
+                        print(f"⚠️ Nieznany model: {model_name}")
+                        continue
+                        
+                    predictions[unique_model_key] = pred
+                    models[unique_model_key] = model
+                    metrics[unique_model_key] = oblicz_metryki(true_probs, pred, model_display_name, verbose=True)
+
+                except Exception as e:
+                    print(f"❌ Błąd podczas uruchamiania modelu {model_display_name}: {e}")
+                    import traceback
+                    traceback.print_exc()
+
+            if len(predictions) >= 2:
+                comparison_stats = self._calculate_comparison_stats(
+                    true_probs, predictions
+                )
+            else:
+                comparison_stats = {
+                    'best_model': list(predictions.keys())[0] if predictions else None,
+                    'wilcoxon_pvalue': None,
+                    'better_counts': {},
+                    'equal_count': 0
+                }
+            
+            duration = (datetime.datetime.now() - start_time).total_seconds()
+            
+            test_id = None
+            if save and len(metrics) >= 2:
+                save_test_params = test_params.copy() 
+                
+                bayesian_model_params_for_save = {}
+                for mn, mp in models_to_test:
+                    if mn == 'bayesian':
+                        bayesian_model_params_for_save = mp
+                        break
+                
+                if not bayesian_model_params_for_save:
+                    bayesian_model_params_for_save = {
+                        'lengthscale': 500,
+                        'variance': 1.0,
+                        'distance_unit': "km",
+                        'mcmc_samples': 5000,
+                        'mcmc_burn': 3000,
+                        'mcmc_scale': 0.05,
+                        'mcmc_seed': 42
+                    }
+                save_test_params['lengthscale'] = bayesian_model_params_for_save.get('lengthscale', 0.0)
+                save_test_params['variance'] = bayesian_model_params_for_save.get('variance', 0.0)
+                save_test_params['mcmc_samples'] = bayesian_model_params_for_save.get('mcmc_samples', 0)
+                save_test_params['mcmc_burn'] = bayesian_model_params_for_save.get('mcmc_burn', 0)
+                save_test_params['mcmc_scale'] = bayesian_model_params_for_save.get('mcmc_scale', 0.0)
+                save_test_params['mcmc_seed'] = bayesian_model_params_for_save.get('mcmc_seed', 0)
+                
+                test_id = self._save_to_database(save_test_params, metrics, 
+                                               comparison_stats, models_to_test, duration)
+            
+            self._print_test_summary(metrics, comparison_stats, duration)
+            
+            if test_number == 1:
+                for model_name, pred in predictions.items():
+                    stworz_mape_porownawcza(gdf, true_probs, pred, 
+                                          f"{model_name.capitalize()} Model")
+                pokaz_punkt_referencyjny(gdf, title="Punkt referencyjny (indeks 1)")
+            
+            return {
+                'test_id': test_id,
+                'predictions': predictions,
+                'metrics': metrics,
+                'models': models,
+                'comparison_stats': comparison_stats,
+                'duration': duration,
+                'success': True,
+                'true_probs': true_probs,
+                'gdf': gdf
+            }
+            
+        except Exception as e:
+            print(f"❌ Błąd podczas testu {test_number}: {e}")
+            import traceback
+            traceback.print_exc()
+            return {
+                'test_id': f"failed_test_{test_number}",
+                'error': str(e),
+                'success': False
+            }
+    
+    def _calculate_comparison_stats(self, true_probs, predictions):
+        """Calculates comparison statistics between models."""
+        errors = {}
+        for model_name, pred in predictions.items():
+            errors[model_name] = np.abs(pred - true_probs)
+        
+        better_counts = {model_name: 0 for model_name in predictions.keys()}
+        equal_count = 0
+        
+        n_points = len(true_probs)
+        for i in range(n_points):
+            point_errors = {model: errors[model][i] for model in predictions.keys()}
+            min_error = min(point_errors.values())
+            
+            best_models = [model for model, error in point_errors.items() 
+                          if error == min_error]
+            
+            if len(best_models) == 1:
+                better_counts[best_models[0]] += 1
+            else:
+                equal_count += 1
+        
+        wilcoxon_pvalue = None
+        model_names = list(predictions.keys())
+        if len(model_names) >= 2:
+            from scipy.stats import wilcoxon
+            try:
+                stat, pvalue = wilcoxon(errors[model_names[0]], errors[model_names[1]])
+                wilcoxon_pvalue = float(pvalue)
+            except:
+                wilcoxon_pvalue = 1.0
+        
+        best_model = None
+        best_mse = float('inf')
+        for model_name, pred in predictions.items():
+            mse = np.mean((pred - true_probs) ** 2)
+            if mse < best_mse:
+                best_mse = mse
+                best_model = model_name
+        
+        return {
+            'better_counts': better_counts,
+            'equal_count': equal_count,
+            'wilcoxon_pvalue': wilcoxon_pvalue,
+            'best_model': best_model,
+            'best_mse': best_mse
+        }
+    
+    def _save_to_database(self, test_params, metrics, comparison_stats, models_to_test, duration):
+        """Saves the results to the database."""
+        test_ids = []
+        
+        remaining_models = list(models_to_test)
+
+        for model_key, model_metrics in metrics.items():
+            model_type = model_key.rsplit('_', 1)[0]
+
+            current_model_params = {}
+            model_found_index = -1
+            for i, (name, params) in enumerate(remaining_models):
+                if name == model_type:
+                    current_model_params = params
+                    model_found_index = i
+                    break
+            
+            if model_found_index != -1:
+                remaining_models.pop(model_found_index)
+
+            save_params = test_params.copy()
+            if model_type == 'bayesian':
+                save_params['lengthscale'] = current_model_params.get('lengthscale', 0)
+                save_params['variance'] = current_model_params.get('variance', 0)
+                save_params['mcmc_samples'] = current_model_params.get('mcmc_samples', 0)
+                save_params['mcmc_burn'] = current_model_params.get('mcmc_burn', 0)
+                save_params['mcmc_scale'] = current_model_params.get('mcmc_scale', 0)
+                save_params['mcmc_seed'] = current_model_params.get('mcmc_seed', 0)
+            
+            metrics_bayesian = {}
+            metrics_dirichlet = {}
+            metrics_gp = {}
+            metrics_spatial = {}
+
+            if model_type == 'bayesian':
+                metrics_bayesian = model_metrics
+            elif model_type == 'dirichlet':
+                metrics_dirichlet = model_metrics
+            elif model_type == 'gaussian':
+                metrics_gp = model_metrics
+            elif model_type == 'spatial':
+                metrics_spatial = model_metrics
+
+            test_id = self.db.save_test_results(
+                save_params,
+                metrics_bayesian,
+                metrics_dirichlet,
+                metrics_gp,
+                metrics_spatial,
+                comparison_stats,
+                duration
+            )
+            test_ids.append(test_id)
+            
+        return test_ids
+    
+    def _print_test_summary(self, metrics, comparison_stats, duration):
+        """Displays the test summary."""
+        print(f"\n📈 PODSUMOWANIE TESTU:")
+        print(f"   - Czas trwania: {duration:.1f}s")
+        
+        if metrics:
+            print(f"\n   MSE:")
+            for model_key, model_metrics in metrics.items():
+                print(f"     - {model_key.capitalize():15s}: {model_metrics.get('MSE', 'N/A'):.6f}")
+            
+            print(f"\n   MAE:")
+            for model_key, model_metrics in metrics.items():
+                print(f"     - {model_key.capitalize():15s}: {model_metrics.get('MAE', 'N/A'):.6f}")
+        
+        if comparison_stats.get('best_model'):
+            print(f"\n   NAJLEPSZY MODEL: {comparison_stats['best_model'].capitalize()} "
+                  f"(MSE={comparison_stats.get('best_mse', 'N/A'):.6f})")
+        
+        if 'better_counts' in comparison_stats:
+            print(f"\n   LICZBA PUNKTÓW Z NAJLEPSZYM WYNIKIEM:")
+            for model_key, count in comparison_stats['better_counts'].items():
+                print(f"     - {model_key.capitalize():15s}: {count}")
+            if comparison_stats.get('equal_count', 0) > 0:
+                print(f"     - Równe wyniki: {comparison_stats['equal_count']}")
+        
+        if comparison_stats.get('wilcoxon_pvalue') is not None:
+            print(f"   - Wilcoxon p-value: {comparison_stats.get('wilcoxon_pvalue'):.4f}")
+    
+    def clear_cache(self):
+        """Clears the data cache."""
+        self.cached_data = None
+        print("✅ Cache danych wyczyszczony")
+    
+    def run_tests(self, base_params, n_tests=1, models_to_test=None, 
+                  varying_params=None, save=False):
+        """Runs a series of tests."""
+        print(f"\n🎯 ROZPOCZĘCIE SERII {n_tests} TESTÓW")
+        print(f"Parametry bazowe: {json.dumps({k: v for k, v in base_params.items() if k != 'csv_path'}, indent=2, default=str)}")
+        
+        all_results = []
+        
+        for i in range(n_tests):
+            test_params = base_params.copy()
+            
+            if varying_params:
+                for param_name, values in varying_params.items():
+                    if i < len(values):
+                        test_params[param_name] = values[i]
+                    else:
+                        test_params[param_name] = values[-1]
+            
+            result = self.test(test_params, i+1, n_tests, models_to_test, save)
+            all_results.append(result)
+            
+            if i < n_tests - 1:
+                print("\n⏳ Przygotowanie do następnego testu...")
+                import time
+                time.sleep(0.1)
+        
+        successful_tests = [r for r in all_results if r['success']]
+        print(f"\n✅ Zakończono serię testów: {len(successful_tests)}/{n_tests} udanych")
+        
+        if save:
+            self.db.print_summary()
+        
+        return all_results
+    
+    def test_observation_length_impact(self, base_params, n_observations_list=None,
+                                     models_to_test=None, save=False):
+        
+        if n_observations_list is None:
+            n_observations_list = [100, 250, 500, 750, 1000, 1500, 2000, 
+                                  2500, 3000, 3500, 5000, 7500, 10000,15000,20000
+                                  ]
+        
+        print(f"\n🎯 BADANIE WPŁYWU LICZBY OBSERWACJI")
+        print(f"{ '='*60}")
+        
+        all_results = []
+        
+        max_obs = max(n_observations_list)
+        cached = self.prepare_data_once(
+            base_params['cutoff_km'], 
+            base_params['co_ktory'], 
+            max_obs
+        )
+        self.cached_data = cached
+        
+        for i, n_obs in enumerate(n_observations_list):
+            print(f"\n{'='*50}")
+            print(f"▶ TEST {i+1}/{len(n_observations_list)} - {n_obs} obserwacji")
+            print(f"{ '='*50}")
+            
+            test_params = base_params.copy()
+            test_params['n_observations'] = n_obs
+            
+            result = self.test(test_params, i+1, len(n_observations_list), 
+                             models_to_test, save=False)
+            
+            if result['success']:
+                result['n_observations'] = n_obs
+                all_results.append(result)
+        
+        self._save_observation_length_results(all_results)
+        
+        self._plot_observation_length_results(all_results)
+        
+        return all_results
+    
+    def _save_observation_length_results(self, results):
+        """Saves the results of the observation length impact study."""
+        if not results:
+            return
+        
+        data = []
+        for result in results:
+            if not result['success']:
+                continue
+            
+            row = {'n_observations': result.get('n_observations', 0)}
+            
+            for model_name, metrics in result.get('metrics', {}).items():
+                for metric_name, value in metrics.items():
+                    if isinstance(value, (int, float)):
+                        row[f"{model_name}_{metric_name.lower()}"] = float(value)
+            
+            data.append(row)
+        
+        if data:
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            output_file = f"observation_length_impact_{timestamp}.csv"
+            
+            df = pd.DataFrame(data)
+            df.to_csv(output_file, index=False)
+            print(f"\n💾 Wyniki badania wpływu obserwacji zapisane do: {output_file}")
+    
+    def _plot_observation_length_results(self, results):
+        """Plots the results of the observation length impact study."""
+        if not results:
+            return
+            
+        data = []
+        for result in results:
+            if not result.get('success'):
+                continue
+            
+            n_obs = result.get('n_observations', 0)
+            row = {'n_observations': n_obs}
+            
+            if 'metrics' in result:
+                for model_name, metrics_dict in result['metrics'].items():
+                    for metric_name, value in metrics_dict.items():
+                        if isinstance(value, (int, float, np.number)):
+                            row[f"{model_name}_{metric_name.lower()}"] = float(value)
+            data.append(row)
+
+        if not data:
+            print("⚠️ Brak danych do wykreślenia")
+            return
+
+        df = pd.DataFrame(data)
+        df = df.sort_values('n_observations')
+
+        fig, axes = plt.subplots(2, 2, figsize=(15, 12))
+        fig.suptitle('Wpływ liczby obserwacji na jakość predykcji', 
+                     fontsize=16, fontweight='bold')
+        
+        model_colors = {'bayesian': 'b', 'dirichlet': 'r', 
+                       'gaussian': 'g', 'spatial': 'm', 'bayesian_gridsearch': 'c', 'bayesian_adaptive_search_binary': 'y'}
+        
+        ax = axes[0, 0]
+        mse_plotted = False
+        for col_name in df.columns:
+            if col_name.endswith('_mse'):
+                model_key = col_name.replace('_mse', '')
+                model_base = model_key.rsplit('_', 1)[0]
+                if model_base in model_colors and not df[col_name].isna().all():
+                    ax.plot(df['n_observations'], df[col_name], 
+                            color=model_colors[model_base], marker='o', 
+                            label=model_key.capitalize(), linewidth=2)
+                    mse_plotted = True
+        
+        if mse_plotted:
+            ax.set_xlabel('Liczba obserwacji')
+            ax.set_ylabel('MSE')
+            ax.set_title('MSE vs liczba obserwacji')
+            ax.legend()
+            ax.grid(True, alpha=0.3)
+            ax.set_yscale('log')
+            ax.set_xscale('log')
+        else:
+            ax.text(0.5, 0.5, 'Brak danych MSE', ha='center', va='center', transform=ax.transAxes)
+
+        ax = axes[0, 1]
+        bayesian_col = next((c for c in df.columns if c.startswith('bayesian') and c.endswith('_mse')), None)
+        dirichlet_col = next((c for c in df.columns if c.startswith('dirichlet') and c.endswith('_mse')), None)
+
+        if bayesian_col and dirichlet_col and not df[bayesian_col].isna().all() and not df[dirichlet_col].isna().all():
+            mse_diff = df[bayesian_col] - df[dirichlet_col]
+            ax.plot(df['n_observations'], mse_diff, 'g-', marker='^', linewidth=2)
+            ax.axhline(y=0, color='k', linestyle='--', alpha=0.5)
+            ax.set_xlabel('Liczba obserwacji')
+            ax.set_ylabel('Różnica MSE')
+            ax.set_title(f'Różnica MSE: {bayesian_col} vs {dirichlet_col}')
+            ax.grid(True, alpha=0.3)
+            ax.set_xscale('log')
+        else:
+            ax.text(0.5, 0.5, 'Brak danych do porównania MSE', ha='center', va='center', transform=ax.transAxes)
+
+        ax = axes[1, 0]
+        mae_plotted = False
+        for col_name in df.columns:
+            if col_name.endswith('_mae'):
+                model_key = col_name.replace('_mae', '')
+                model_base = model_key.rsplit('_', 1)[0]
+                if model_base in model_colors and not df[col_name].isna().all():
+                    ax.plot(df['n_observations'], df[col_name], 
+                            color=model_colors[model_base], marker='s', 
+                            label=model_key.capitalize(), linewidth=2)
+                    mae_plotted = True
+        
+        if mae_plotted:
+            ax.set_xlabel('Liczba obserwacji')
+            ax.set_ylabel('MAE')
+            ax.set_title('MAE vs liczba obserwacji')
+            ax.legend()
+            ax.grid(True, alpha=0.3)
+            ax.set_yscale('log')
+            ax.set_xscale('log')
+        else:
+            ax.text(0.5, 0.5, 'Brak danych MAE', ha='center', va='center', transform=ax.transAxes)
+
+        ax = axes[1, 1]
+        corr_plotted = False
+        for col_name in df.columns:
+            if col_name.endswith('_correlation'):
+                model_key = col_name.replace('_correlation', '')
+                model_base = model_key.rsplit('_', 1)[0]
+                if model_base in model_colors and not df[col_name].isna().all():
+                    ax.plot(df['n_observations'], df[col_name], 
+                            color=model_colors[model_base], marker='x', 
+                            label=model_key.capitalize(), linewidth=2)
+                    corr_plotted = True
+
+        if corr_plotted:
+            ax.set_xlabel('Liczba obserwacji')
+            ax.set_ylabel('Korelacja')
+            ax.set_title('Korelacja vs liczba obserwacji')
+            ax.legend()
+            ax.grid(True, alpha=0.3)
+            ax.set_xscale('log')
+        else:
+            ax.text(0.5, 0.5, 'Brak danych korelacji', ha='center', va='center', transform=ax.transAxes)
+
+        plt.tight_layout(rect=[0, 0, 1, 0.96])
+        
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        plot_file = f"observation_length_impact_{timestamp}.png"
+        plt.savefig(plot_file, dpi=150, bbox_inches='tight')
+        plt.show()
+        print(f"\n  ✔ Wykresy zapisane do: {plot_file}")
