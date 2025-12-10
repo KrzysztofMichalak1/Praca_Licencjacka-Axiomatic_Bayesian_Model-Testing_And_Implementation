@@ -1,5 +1,6 @@
 ﻿#MODELE
 #region
+#region
 #  MODEL BAYES FIELD
 #region
 from numba import njit
@@ -101,13 +102,12 @@ class BayesianFieldModel:
         self.variance = variance
         self.distance_unit = distance_unit
 
-        self.Sigma_u = None  # Macierz kowariancji dla znormalizowanych zmiennych
-        self.mvn_u = None     # Rozkład MVN dla u
-        self.samples_w = None # Próbki dla w (w_i / d(p1,pi))
-        self.samples_x = None # Próbki dla x
+        self.Sigma_u = None
+        self.mvn_u = None
+        self.samples_w = None
+        self.samples_x = None
         
-        # ✅ OPTYMALIZACJA 1: Prekomputacja stałych
-        self.counts_f = None  # counts jako float64
+        self.counts_f = None
         
         print("  ✔ Model gotowy.\n")
 
@@ -116,7 +116,6 @@ class BayesianFieldModel:
     
         p1 = self.space_points[0]
     
-        # 1. Buduj macierz kowariancji Σ_w dla oryginalnych w
         Sigma_w = np.zeros((self.m, self.m))
         for i in range(self.m):
             pi = self.space_points[i+1]
@@ -140,7 +139,6 @@ class BayesianFieldModel:
         print("  ✔ Prekomputacja stałych zakończona.")
 
     def znajdz_dobry_punkt_startowy(self, n_trials=20):
-        """Znajduje punkt startowy który unika trywialnych rozwiązań"""
         return np.zeros(self.n-1)
 
     def przygotuj_predykcyjny(self, num_samples, burn_in, proposal_scale, seed=None):
@@ -148,44 +146,32 @@ class BayesianFieldModel:
         print("▶ [MCMC] START SAMPLERA Z ADAPTACYJNYM MCMC (POPRAWIONA WERSJA)")
         print("="*70)
 
-        # Inicjalizacja timerów
         import time
         timers = {
-            'log_posterior': 0.0,
-            'proposal_generation': 0.0,
-            'transform_w_to_x': 0.0,
-            'adaptation': 0.0,
-            'other': 0.0
+            'log_posterior': 0.0, 'proposal_generation': 0.0,
+            'transform_w_to_x': 0.0, 'adaptation': 0.0, 'other': 0.0
         }
         total_start_time = time.time()
 
         if seed is not None:
             np.random.seed(seed)
 
-        # Znajdź dobry punkt startowy
         w_current = self.znajdz_dobry_punkt_startowy()
-    
-        # Oblicz początkową wartość log-posterior
         logpost_current = log_posterior_fast(w_current, self.counts_f, self.mvn_u.L, 
                                            self.mvn_u.log_norm_const)
 
-        # Inicjalizacja adaptacyjnego MCMC
         adaptation_period = min(1000, burn_in // 2)
         adaptation_updates = 0
     
-        # Inicjalizacja macierzy kowariancji propozycji
-        # Używamy przeskalowanej macierzy apriori jako punktu startowego
         if self.Sigma_u is not None:
-            # Upewnij się, że macierz jest dodatnio określona
             cov_prop = (proposal_scale**2) * self.Sigma_u
             try:
-                # Spróbuj rozkład Cholesky'ego dla generowania propozycji
                 L_prop = np.linalg.cholesky(cov_prop)
                 use_cholesky = True
             except np.linalg.LinAlgError:
                 print("  ⚠️ Macierz kowariancji nie jest dodatnio określona, używam diagonalnej")
                 cov_prop = (proposal_scale**2) * np.eye(self.m)
-                L_prop = np.sqrt(cov_prop)  # Dla macierzy diagonalnej
+                L_prop = np.sqrt(cov_prop)
                 use_cholesky = True
         else:
             cov_prop = (proposal_scale**2) * np.eye(self.m)
@@ -196,8 +182,6 @@ class BayesianFieldModel:
         total_iterations = num_samples + burn_in
         accepted = 0
         accepted_burnin = 0
-    
-        # Śledzenie statystyk akceptacji dla adaptacji
         acceptance_history = []
     
         print(f"📊 PARAMETRY MCMC:")
@@ -205,216 +189,165 @@ class BayesianFieldModel:
         print(f"   - Burn-in: {burn_in}")
         print(f"   - Próbki posteriora: {num_samples}")
         print(f"   - Adaptacja przez: {adaptation_period} iteracji")
-        print(f"   - Wymiar przestrzeni stanów: {self.m}")
         print(f"   - Początkowy proposal scale: {proposal_scale}")
         print(f"   - Start LP: {logpost_current:.1f}")
-        print(f"   - Używam Cholesky: {use_cholesky}")
         print("-" * 50)
 
         print("🔄 ROZPOCZĘCIE ITERACJI MCMC...")
     
         for i in range(total_iterations):
             iter_start_time = time.time()
-        
-            # GENEROWANIE PROPOZYCJI - POPRAWIONA WERSJA
             prop_start = time.time()
-            try:
-                if use_cholesky:
-                    # Generuj propozycję używając rozkładu Cholesky'ego
-                    z = np.random.normal(0, 1, self.m)
-                    w_prop = w_current + L_prop @ z
-                else:
-                    # Fallback: niezależne propozycje dla każdej składowej
-                    print("gówno się odpaliło")
-                    w_prop = w_current + np.random.normal(0, proposal_scale, self.m)
-            except Exception as e:
-                # Awaryjne generowanie propozycji
-                print("ekstra gówno się odpaliło")
-                w_prop = w_current + np.random.normal(0, 0.1, self.m)
+            
+            z = np.random.normal(0, 1, self.m)
+            w_prop = w_current + L_prop @ z
             timers['proposal_generation'] += time.time() - prop_start
 
-            # OBLICZENIE LOG-POSTERIOR DLA PROPOZYCJI
             lp_start = time.time()
             try:
                 logpost_prop = log_posterior_fast(w_prop, self.counts_f, self.mvn_u.L, 
                                                 self.mvn_u.log_norm_const)
-            except (ValueError, RuntimeError) as e:
-                # Jeśli obliczenia się nie powiodą, odrzuć propozycję
+            except (ValueError, RuntimeError):
                 logpost_prop = -np.inf
             timers['log_posterior'] += time.time() - lp_start
 
-            # DECYZJA O AKCEPTACJI - SYMETRYCZNY RANDOM WALK
             accept = False
             if np.isfinite(logpost_prop):
                 log_alpha = logpost_prop - logpost_current
-            
-                # Symetryczny random walk - nie ma dodatkowych członów
                 if log_alpha >= 0 or np.log(np.random.uniform()) < log_alpha:
                     accept = True
-                    
-
-            # AKTUALIZACJA STANU
+            
             if accept:
                 w_current = w_prop
                 logpost_current = logpost_prop
-                if i >= burn_in:
-                    accepted += 1
-                else:
-                    accepted_burnin += 1
+                if i >= burn_in: accepted += 1
+                else: accepted_burnin += 1
         
-            # ZAPIS PRÓBEK PO BURN-IN
             if i >= burn_in:
                 samples.append(w_current.copy())
             
-            # ŚLEDZENIE HISTORII AKCEPTACJI DLA ADAPTACJI
             acceptance_history.append(1 if accept else 0)
             if len(acceptance_history) > 100:
                 acceptance_history.pop(0)
 
             adaptation_start = time.time()
-            if i < adaptation_period and i >= 100:
-                current_acc_rate = np.mean(acceptance_history[-100:]) if len(acceptance_history) >= 100 else np.mean(acceptance_history)
-            
-                # Adaptuj co 50 iteracji
-                if i % 50 == 0:
-                    old_scale = proposal_scale
+            if i < adaptation_period and i >= 100 and i % 50 == 0:
+                current_acc_rate = np.mean(acceptance_history)
+                old_scale = proposal_scale
                 
-                    if current_acc_rate < 0.15:
-                        # Za mało akceptacji - zmniejsz krok
-                        proposal_scale *= 0.8
-                        adaptation_updates += 1
-                    elif current_acc_rate > 0.35:
-                        # Za dużo akceptacji - zwiększ krok  
-                        proposal_scale *= 1.2
-                        adaptation_updates += 1
-                    # Dla 0.15-0.35 zostaw bez zmian (optymalny zakres)
+                if current_acc_rate < 0.15: proposal_scale *= 0.8
+                elif current_acc_rate > 0.35: proposal_scale *= 1.2
                 
-                    # Aktualizuj macierz kowariancji jeśli zmienił się scale
-                    if proposal_scale != old_scale:
-                        if self.Sigma_u is not None and use_cholesky:
-                            cov_prop = (proposal_scale**2) * self.Sigma_u
-                            try:
-                                L_prop = np.linalg.cholesky(cov_prop)
-                            except np.linalg.LinAlgError:
-                                # Fallback na diagonalną
-                                cov_prop = (proposal_scale**2) * np.eye(self.m)
-                                L_prop = np.sqrt(cov_prop)
-                        else:
-                            cov_prop = (proposal_scale**2) * np.eye(self.m)
-                            L_prop = np.sqrt(cov_prop)
+                if proposal_scale != old_scale:
+                    adaptation_updates += 1
+                    cov_prop = (proposal_scale**2) * self.Sigma_u
+                    try:
+                        L_prop = np.linalg.cholesky(cov_prop)
+                    except np.linalg.LinAlgError:
+                        cov_prop = (proposal_scale**2) * np.eye(self.m)
+                        L_prop = np.sqrt(cov_prop)
                     
-                        if i % 200 == 0:  # Rzadziej wypisuj informacje
-                            print(f"   🔄 ADAPTACJA: scale {old_scale:.4f} → {proposal_scale:.4f} (acc: {current_acc_rate:.3f})")
-        
+                    if i % 200 == 0:
+                        print(f"   🔄 ADAPTACJA: scale {old_scale:.4f} → {proposal_scale:.4f} (acc: {current_acc_rate:.3f})")
             timers['adaptation'] += time.time() - adaptation_start
-
-            # WYPISYWANIE STATUSU - POPRAWIONA WERSJA
-            if i % 500 == 0 or i == total_iterations - 1 or (i < 100 and i % 50 == 0):
-                transform_start = time.time()
-                try:
-                    x_current = x_from_w(w_current)
-                    x_min, x_max = np.min(x_current), np.max(x_current)
-                except:
-                    x_min, x_max = np.nan, np.nan
-                timers['transform_w_to_x'] += time.time() - transform_start
             
+            if i % 500 == 0 or i == total_iterations - 1:
                 status = "BURN-IN" if i < burn_in else "SAMPLING"
                 progress = (i + 1) / total_iterations * 100
-            
-                # Oblicz aktualny wskaźnik akceptacji
-                if i < burn_in:
-                    current_acc_display = accepted_burnin / max(1, i + 1)
-                else:
-                    samples_so_far = i - burn_in + 1
-                    current_acc_display = accepted / max(1, samples_so_far)
-            
+                current_acc_display = (accepted_burnin / max(1, i + 1)) if i < burn_in else (accepted / max(1, i - burn_in + 1))
                 print(f"   🔸 Iter {i:5d}/{total_iterations} [{status:8s}] | "
-                      f"LP={logpost_current:8.1f} | "
-                      f"AccRate={current_acc_display:6.3f} | "
-                      f"Scale={proposal_scale:6.4f} | "
-                      f"x_range=[{x_min:.2e},{x_max:.2e}] | "
-                      f"Progress: {progress:5.1f}%")
+                      f"LP={logpost_current:8.1f} | AccRate={current_acc_display:.3f}")
         
-            timers['other'] += time.time() - iter_start_time - (
-                timers['log_posterior'] + timers['proposal_generation'] + 
-                timers['transform_w_to_x'] + timers['adaptation']
-            )
-
-        # TRANSFORMACJA PRÓBEK NA X - OPTYMALIZACJA
-        transform_samples_start = time.time()
         self.samples_w = np.array(samples)
-    
-        # Zoptymalizowana transformacja wszystkich próbek na raz
         if len(self.samples_w) > 0:
-            # Oblicz x dla wszystkich próbek jednocześnie
-            x_samples = []
-            for w_sample in self.samples_w:
-                try:
-                    x_sample = x_from_w(w_sample)
-                    x_samples.append(x_sample)
-                except (ValueError, RuntimeError):
-                    # W przypadku błędu, użyj jednorodnego rozkładu jako fallback
-                    x_samples.append(np.ones(self.n) / self.n)
-            self.samples_x = np.array(x_samples)
+            self.samples_x = np.array([x_from_w(w) for w in self.samples_w])
         else:
             self.samples_x = np.array([])
         
-        timers['transform_w_to_x'] += time.time() - transform_samples_start
-
-        total_time = time.time() - total_start_time
         final_acc_rate = accepted / max(1, num_samples)
-        burnin_acc_rate = accepted_burnin / max(1, burn_in)
-
         print("\n" + "="*70)
         print("✅ MCMC ZAKOŃCZONE - PODSUMOWANIE")
-        print("="*70)
-        print(f"📊 STATYSTYKI:")
-        print(f"   ✔ Próbek posteriora:           {len(self.samples_x)}")
-        print(f"   ✔ Akceptacje (burn-in):        {accepted_burnin}/{burn_in} ({burnin_acc_rate:.4f})")
-        print(f"   ✔ Akceptacje (sampling):       {accepted}/{num_samples} ({final_acc_rate:.4f})")
-        print(f"   ✔ Aktualizacji adaptacyjnych:  {adaptation_updates}")
-        print(f"   ✔ Końcowy proposal scale:      {proposal_scale:.4f}")
-    
-        # DIAGNOSTYKA PRÓBEK
-        if len(self.samples_x) > 0:
-            x_mean = np.mean(self.samples_x, axis=0)
-            print(f"   ✔ Średnia posterior - min:     {np.min(x_mean):.2e}")
-            print(f"   ✔ Średnia posterior - max:     {np.max(x_mean):.2e}")
-            print(f"   ✔ Średnia posterior - suma:    {np.sum(x_mean):.6f}")
-
-        print(f"\n⏱️  CZAS WYKONANIA FUNKCJI:")
-        print(f"   • log_posterior:           {timers['log_posterior']:.2f}s ({timers['log_posterior']/total_time*100:.1f}%)")
-        print(f"   • proposal_generation:     {timers['proposal_generation']:.2f}s ({timers['proposal_generation']/total_time*100:.1f}%)")
-        print(f"   • transform_w_to_x:        {timers['transform_w_to_x']:.2f}s ({timers['transform_w_to_x']/total_time*100:.1f}%)")
-        print(f"   • adaptation:              {timers['adaptation']:.2f}s ({timers['adaptation']/total_time*100:.1f}%)")
-        print(f"   • other:                   {timers['other']:.2f}s ({timers['other']/total_time*100:.1f}%)")
-        print(f"   • CAŁKOWITY CZAS:          {total_time:.2f}s")
-
-        print(f"\n📈 WYDAJNOŚĆ:")
-        iterations_per_second = total_iterations / total_time if total_time > 0 else 0
-        print(f"   • Iteracje na sekundę:     {iterations_per_second:.1f}")
-        print(f"   • Czas na iterację:        {total_time/total_iterations*1000:.1f}ms")
+        print(f"   ✔ Akceptacje (sampling): {accepted}/{num_samples} ({final_acc_rate:.4f})")
+        print(f"   ✔ Końcowy proposal scale: {proposal_scale:.4f}")
         print("="*70 + "\n")
+
     def posterior_mean(self):
-        """Oblicza średnią posterior"""
-        if self.samples_x is None:
-            raise ValueError("Brak próbek posteriora. Uruchom najpierw przygotuj_predykcyjny().")
-        print("▶ [POST] Liczę średnią posterior...")
+        if self.samples_x is None: raise ValueError("Brak próbek posteriora.")
         return np.mean(self.samples_x, axis=0)
+    
     def posterior_quantiles(self, q=(0.025, 0.975)):
-        """Oblicza kwantyle posterior"""
-        if self.samples_x is None:
-            raise ValueError("Brak próbek posteriora.")
+        if self.samples_x is None: raise ValueError("Brak próbek posteriora.")
         return np.quantile(self.samples_x, q, axis=0)
-    def get_u_samples(self):
-        """Zwraca próbki dla znormalizowanych zmiennych u"""
-        if self.samples_w is None:
-            raise ValueError("Brak próbek posteriora.")
-        return self.samples_w 
-    def get_w_samples(self):
-        """Zwraca próbki dla oryginalnych zmiennych w (w_i / d(p1,pi))"""
-        return self.samples_w
-#region
+
+class BayesianFieldModelGridSearch(BayesianFieldModel):
+    def __init__(self, space_points, metric_func, observed_indices,
+                 variance, distance_unit='km', lengthscale_grid=None):
+        
+        # Inicjalizuj z tymczasowym lengthscale=1; zostanie on nadpisany
+        super().__init__(space_points, metric_func, observed_indices, 1, variance, distance_unit)
+        self.lengthscale_grid = lengthscale_grid or [5000, 4500, 6500, 5500, 6000]
+        print(f"\n▶ [GRID-SEARCH MODEL] Inicjalizacja z siatką lengthscale: {self.lengthscale_grid}")
+
+    def przygotuj_apriori(self):
+        print("▶ [GRID SEARCH] Rozpoczynanie K-krotnej walidacji krzyżowej dla 'lengthscale'...")
+        
+        K = 5
+        shuffled_indices = np.random.permutation(self.observed_indices)
+        folds = np.array_split(shuffled_indices, K)
+        
+        best_ls = -1
+        best_avg_score = -np.inf
+        
+        for ls in self.lengthscale_grid:
+            fold_scores = []
+            print(f"--- Testuję lengthscale = {ls} ---")
+            
+            for k in range(K):
+                val_indices = folds[k]
+                train_indices_list = [folds[i] for i in range(K) if i != k]
+                train_indices = np.concatenate(train_indices_list)
+
+                print(f"  Fold {k+1}/{K}: Trening na {len(train_indices)} obserwacjach...")
+                
+                try:
+                    temp_model = BayesianFieldModel(
+                        space_points=self.space_points,
+                        metric_func=self.metric,
+                        observed_indices=train_indices,
+                        lengthscale=ls,
+                        variance=self.variance,
+                        distance_unit=self.distance_unit
+                    )
+                    
+                    temp_model.przygotuj_apriori()
+                    temp_model.przygotuj_predykcyjny(num_samples=1000, burn_in=500, proposal_scale=0.05, seed=42)
+                    
+                    pred_probs = temp_model.posterior_mean()
+                    
+                    # Log-Likelihood on validation set
+                    score = np.sum(np.log(pred_probs[val_indices] + 1e-9))
+                    fold_scores.append(score)
+                    print(f"    Fold {k+1} score: {score:.2f}")
+                except Exception as e:
+                    print(f"    Fold {k+1} BŁĄD: {e}")
+                    fold_scores.append(-np.inf)
+
+            avg_score = np.mean(fold_scores)
+            print(f"  > Średni wynik dla lengthscale={ls}: {avg_score:.2f}\n")
+            
+            if avg_score > best_avg_score:
+                best_avg_score = avg_score
+                best_ls = ls
+
+        if best_ls == -1:
+            raise ValueError("Grid search z walidacją krzyżową nie znalazł poprawnego 'lengthscale'.")
+        
+        print(f"✅ Najlepszy 'lengthscale' znaleziony przez walidację krzyżową: {best_ls} (wynik: {best_avg_score:.2f})")
+        self.lengthscale = best_ls
+        
+        print("\n▶ [APRIORI] Finalne przygotowanie z najlepszym 'lengthscale'...")
+        super().przygotuj_apriori()
+#endregion
 #  MODEL DIRICHLETA
 class DirichletModel:
     """Prosty model Dirichleta jako baseline"""
@@ -1342,6 +1275,23 @@ class TestManager:
                         )
                         pred = model.posterior_mean()
 
+                    elif model_name == 'bayesian_gridsearch':
+                        print(f"\n--- MODEL: {model_display_name.upper()} ---")
+                        constructor_params = {
+                            'space_points': points, 'metric_func': haversine, 'observed_indices': obs_idx,
+                            'variance': model_params.get('variance', 1.0),
+                            'distance_unit': model_params.get('distance_unit', 'km'),
+                            'lengthscale_grid': model_params.get('lengthscale_grid', [500, 1500, 2500, 4000, 6000])
+                        }
+                        model = BayesianFieldModelGridSearch(**constructor_params)
+                        model.przygotuj_apriori() # This will run the grid search
+                        model.przygotuj_predykcyjny(
+                            num_samples=model_params.get('mcmc_samples', 5000),
+                            burn_in=model_params.get('mcmc_burn', 3000),
+                            proposal_scale=model_params.get('mcmc_scale', 0.05),
+                            seed=model_params.get('mcmc_seed', 42) + test_number
+                        )
+                        pred = model.posterior_mean()
                     elif model_name == 'dirichlet':
                         print(f"\n--- MODEL: {model_display_name.upper()} ---")
                         model = DirichletModel(obs_idx, len(gdf))
@@ -1777,7 +1727,8 @@ class TestManager:
         fig.suptitle('Wpływ liczby obserwacji na jakość predykcji', 
                      fontsize=16, fontweight='bold')
         
-        model_colors = {'bayesian': 'b', 'dirichlet': 'r', 'gaussian': 'g', 'spatial': 'm'}
+        model_colors = {'bayesian': 'b', 'dirichlet': 'r', 
+                       'gaussian': 'g', 'spatial': 'm', 'bayesian_gridsearch': 'c'}
         
         # 1. MSE vs liczba obserwacji
         ax = axes[0, 0]
@@ -1966,7 +1917,7 @@ if __name__ == "__main__":
     # Podstawowe parametry dla wszystkich testów (ogólne, nie specyficzne dla modelu)
     base_params = {
         'cutoff_km': 1000,      # Odcięcie od brzegu w km
-        'co_ktory': 100,        # Redukcja siatki (co n-ty punkt)
+        'co_ktory': 200,        # Redukcja siatki (co n-ty punkt)
         'n_observations': 50000,# Domyślna liczba obserwacji
         'n_points': 0           # (nie edytować, ustawiane automatycznie)
     }
@@ -2018,6 +1969,15 @@ if __name__ == "__main__":
             'lengthscale': 5000,
             'variance': 1.0,
             'distance_unit': "km",
+            'mcmc_samples': 5000,
+            'mcmc_burn': 3000,
+            'mcmc_scale': 0.05,
+            'mcmc_seed': 42
+        }),
+        ('bayesian_gridsearch', {
+            'variance': 1.0,
+            'distance_unit': "km",
+            'lengthscale_grid': [5000, 5500, 4500, 4000, 6000,15000000],
             'mcmc_samples': 5000,
             'mcmc_burn': 3000,
             'mcmc_scale': 0.05,
