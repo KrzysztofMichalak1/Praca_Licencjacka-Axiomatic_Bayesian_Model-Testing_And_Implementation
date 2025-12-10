@@ -964,68 +964,70 @@ class ResultsDatabase:
         
         # Znajdź najlepszy model wg MSE
         models_mse = {
-            'Bayesian': metrics_bayesian['MSE'],
-            'Dirichlet': metrics_dirichlet['MSE'],
-            'GP': metrics_gp['MSE'],
-            'Spatial': metrics_spatial['MSE']
+            'Bayesian': metrics_bayesian.get('MSE', np.nan),
+            'Dirichlet': metrics_dirichlet.get('MSE', np.nan),
+            'GP': metrics_gp.get('MSE', np.nan),
+            'Spatial': metrics_spatial.get('MSE', np.nan)
         }
-        best_model_mse = min(models_mse, key=models_mse.get)
+        # Usuń modele z nan, aby znaleźć minimum
+        valid_models_mse = {k: v for k, v in models_mse.items() if not np.isnan(v)}
+        best_model_mse = min(valid_models_mse, key=valid_models_mse.get) if valid_models_mse else 'N/A'
         
         # Przygotuj nowy wiersz
         new_row = {
             'test_id': test_id,
             'timestamp': datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            'n_points': test_params['n_points'],
-            'n_observations': test_params['n_observations'],
-            'lengthscale': test_params['lengthscale'],
-            'variance': test_params['variance'],
-            'mcmc_samples': test_params['mcmc_samples'],
-            'mcmc_burn': test_params['mcmc_burn'],
-            'mcmc_scale': test_params['mcmc_scale'],
-            'mcmc_seed': test_params['mcmc_seed'],
+            'n_points': test_params.get('n_points', 0),
+            'n_observations': test_params.get('n_observations', 0),
+            'lengthscale': test_params.get('lengthscale', 0),
+            'variance': test_params.get('variance', 0),
+            'mcmc_samples': test_params.get('mcmc_samples', 0),
+            'mcmc_burn': test_params.get('mcmc_burn', 0),
+            'mcmc_scale': test_params.get('mcmc_scale', 0),
+            'mcmc_seed': test_params.get('mcmc_seed', 0),
             
             # Metryki Bayesian Field
-            'bayesian_mse': float(metrics_bayesian['MSE']),
-            'bayesian_mae': float(metrics_bayesian['MAE']),
-            'bayesian_rmse': float(metrics_bayesian['RMSE']),
-            'bayesian_correlation': float(metrics_bayesian['Correlation']),
-            'bayesian_covariance': float(metrics_bayesian['Covariance']),
+            'bayesian_mse': float(metrics_bayesian.get('MSE', np.nan)),
+            'bayesian_mae': float(metrics_bayesian.get('MAE', np.nan)),
+            'bayesian_rmse': float(metrics_bayesian.get('RMSE', np.nan)),
+            'bayesian_correlation': float(metrics_bayesian.get('Correlation', np.nan)),
+            'bayesian_covariance': float(metrics_bayesian.get('Covariance', np.nan)),
             
             # Metryki Dirichlet
-            'dirichlet_mse': float(metrics_dirichlet['MSE']),
-            'dirichlet_mae': float(metrics_dirichlet['MAE']),
-            'dirichlet_rmse': float(metrics_dirichlet['RMSE']),
-            'dirichlet_correlation': float(metrics_dirichlet['Correlation']),
-            'dirichlet_covariance': float(metrics_dirichlet['Covariance']),
+            'dirichlet_mse': float(metrics_dirichlet.get('MSE', np.nan)),
+            'dirichlet_mae': float(metrics_dirichlet.get('MAE', np.nan)),
+            'dirichlet_rmse': float(metrics_dirichlet.get('RMSE', np.nan)),
+            'dirichlet_correlation': float(metrics_dirichlet.get('Correlation', np.nan)),
+            'dirichlet_covariance': float(metrics_dirichlet.get('Covariance', np.nan)),
             
             # Metryki Gaussian Process
-            'gp_mse': float(metrics_gp['MSE']),
-            'gp_mae': float(metrics_gp['MAE']),
-            'gp_rmse': float(metrics_gp['RMSE']),
-            'gp_correlation': float(metrics_gp['Correlation']),
-            'gp_covariance': float(metrics_gp['Covariance']),
+            'gp_mse': float(metrics_gp.get('MSE', np.nan)),
+            'gp_mae': float(metrics_gp.get('MAE', np.nan)),
+            'gp_rmse': float(metrics_gp.get('RMSE', np.nan)),
+            'gp_correlation': float(metrics_gp.get('Correlation', np.nan)),
+            'gp_covariance': float(metrics_gp.get('Covariance', np.nan)),
             
             # Metryki Spatial Smoothing
-            'spatial_mse': float(metrics_spatial['MSE']),
-            'spatial_mae': float(metrics_spatial['MAE']),
-            'spatial_rmse': float(metrics_spatial['RMSE']),
-            'spatial_correlation': float(metrics_spatial['Correlation']),
-            'spatial_covariance': float(metrics_spatial['Covariance']),
+            'spatial_mse': float(metrics_spatial.get('MSE', np.nan)),
+            'spatial_mae': float(metrics_spatial.get('MAE', np.nan)),
+            'spatial_rmse': float(metrics_spatial.get('RMSE', np.nan)),
+            'spatial_correlation': float(metrics_spatial.get('Correlation', np.nan)),
+            'spatial_covariance': float(metrics_spatial.get('Covariance', np.nan)),
             
             # Różnice i najlepsze modele
-            'mse_diff': float(metrics_bayesian['MSE'] - metrics_dirichlet['MSE']),
-            'mae_diff': float(metrics_bayesian['MAE'] - metrics_dirichlet['MAE']),
-            'correlation_diff': float(metrics_bayesian['Correlation'] - metrics_dirichlet['Correlation']),
+            'mse_diff': float(metrics_bayesian.get('MSE', np.nan) - metrics_dirichlet.get('MSE', np.nan)),
+            'mae_diff': float(metrics_bayesian.get('MAE', np.nan) - metrics_dirichlet.get('MAE', np.nan)),
+            'correlation_diff': float(metrics_bayesian.get('Correlation', np.nan) - metrics_dirichlet.get('Correlation', np.nan)),
             'better_model_mse': best_model_mse,
-            'better_model_mae': 'Bayesian' if metrics_bayesian['MAE'] < metrics_dirichlet['MAE'] else 'Dirichlet',
+            'better_model_mae': 'Bayesian' if metrics_bayesian.get('MAE', np.inf) < metrics_dirichlet.get('MAE', np.inf) else 'Dirichlet',
             
             # Statystyki porównania
-            'bayesian_better_count': int(comparison_stats['bayesian_better_count']),
-            'dirichlet_better_count': int(comparison_stats['dirichlet_better_count']),
-            'gp_better_count': int(comparison_stats['gp_better_count']),
-            'spatial_better_count': int(comparison_stats['spatial_better_count']),
-            'equal_count': int(comparison_stats['equal_count']),
-            'wilcoxon_pvalue': float(comparison_stats['wilcoxon_pvalue']),
+            'bayesian_better_count': int(comparison_stats.get('bayesian_better_count', 0)),
+            'dirichlet_better_count': int(comparison_stats.get('dirichlet_better_count', 0)),
+            'gp_better_count': int(comparison_stats.get('gp_better_count', 0)),
+            'spatial_better_count': int(comparison_stats.get('spatial_better_count', 0)),
+            'equal_count': int(comparison_stats.get('equal_count', 0)),
+            'wilcoxon_pvalue': float(comparison_stats.get('wilcoxon_pvalue', np.nan)),
             'test_duration_seconds': float(duration)
         }
         
@@ -1265,19 +1267,26 @@ class TestManager:
         print(f"{'='*60}")
         
         # Domyślne modele do testowania, jeśli nie podano
+        # Te domyślne parametry są tylko dla wewnętrznego użycia, 
+        # prawdziwa konfiguracja powinna być w bloku if __name__ == "__main__":
+        # Pamiętaj, że te domyślne wartości są niezależne od base_params.
         if models_to_test is None:
             models_to_test = [
                 ('bayesian', {
-                    'lengthscale': test_params['lengthscale'],
-                    'variance': test_params['variance'],
-                    'distance_unit': test_params.get('distance_unit', 'km')
+                    'lengthscale': 500,
+                    'variance': 1.0,
+                    'distance_unit': "km",
+                    'mcmc_samples': 5000,
+                    'mcmc_burn': 3000,
+                    'mcmc_scale': 0.05,
+                    'mcmc_seed': 42
                 }),
                 ('dirichlet', {}),
                 ('spatial', {'smoothing_factor': 0.1})
             ]
         
         # Wyświetl jakie modele będą testowane
-        active_models = [name for name, params in models_to_test]
+        active_models = [f"{name}_{i}" for i, (name, params) in enumerate(models_to_test)]
         print(f"🎯 TESTOWANE MODELE: {', '.join(active_models)}")
         
         start_time = datetime.datetime.now()
@@ -1310,67 +1319,66 @@ class TestManager:
             models = {}
 
             # Pętla po modelach do testowania
-            for model_name, model_params in models_to_test:
-                model_full_name = "Unknown"
+            for i, (model_name, model_params) in enumerate(models_to_test):
+                unique_model_key = f"{model_name}_{i}"
+                model_display_name = f"{model_name.capitalize()} ({i})"
                 
                 try:
                     if model_name == 'bayesian':
-                        model_full_name = "Bayesian Field Model"
-                        print(f"\n--- MODEL: {model_full_name.upper()} ---")
-                        
+                        print(f"\n--- MODEL: {model_display_name.upper()} ---")
                         constructor_params = {
-                            'space_points': points,
-                            'metric_func': haversine,
-                            'observed_indices': obs_idx,
-                            **model_params
+                            'space_points': points, 'metric_func': haversine, 'observed_indices': obs_idx,
+                            'lengthscale': model_params.get('lengthscale', 500),
+                            'variance': model_params.get('variance', 1.0),
+                            'distance_unit': model_params.get('distance_unit', 'km')
                         }
-                        
                         model = BayesianFieldModel(**constructor_params)
                         model.przygotuj_apriori()
                         model.przygotuj_predykcyjny(
-                            num_samples=test_params['mcmc_samples'],
-                            burn_in=test_params['mcmc_burn'],
-                            proposal_scale=test_params['mcmc_scale'],
-                            seed=test_params['mcmc_seed'] + test_number
+                            num_samples=model_params.get('mcmc_samples', 5000),
+                            burn_in=model_params.get('mcmc_burn', 3000),
+                            proposal_scale=model_params.get('mcmc_scale', 0.05),
+                            seed=model_params.get('mcmc_seed', 42) + test_number
                         )
                         pred = model.posterior_mean()
 
                     elif model_name == 'dirichlet':
-                        model_full_name = "Dirichlet Model"
-                        print(f"\n--- MODEL: {model_full_name.upper()} ---")
+                        print(f"\n--- MODEL: {model_display_name.upper()} ---")
                         model = DirichletModel(obs_idx, len(gdf))
                         pred = model.posterior_mean()
 
                     elif model_name == 'gaussian':
-                        model_full_name = "Gaussian Process Model"
-                        print(f"\n--- MODEL: {model_full_name.upper()} ---")
-                        
-                        gp_params = {
-                            'lengthscale_prior': (1000, 500),
-                            'variance_prior': (2, 1),
-                            **model_params
+                        print(f"\n--- MODEL: {model_display_name.upper()} ---")
+                        gp_constructor_params = {
+                            'space_points': points, 'observed_indices': obs_idx,
+                            'lengthscale_prior': model_params.get('lengthscale_prior', (1000, 500)),
+                            'variance_prior': model_params.get('variance_prior', (2, 1))
                         }
-                        
-                        model = BayesianGaussianProcess(points, obs_idx, **gp_params)
-                        model.sample_posterior(n_samples=1000, burn_in=500, step_size=0.1)
+                        model = BayesianGaussianProcess(**gp_constructor_params)
+                        model.sample_posterior(
+                            n_samples=model_params.get('n_samples', 1000),
+                            burn_in=model_params.get('burn_in', 500),
+                            step_size=model_params.get('step_size', 0.1)
+                        )
                         pred = model.posterior_predictive()
 
                     elif model_name == 'spatial':
-                        model_full_name = "Spatial Smoothing Model"
-                        print(f"\n--- MODEL: {model_full_name.upper()} ---")
-                        model = BayesianSpatialSmoothing(points, obs_idx, **model_params)
+                        print(f"\n--- MODEL: {model_display_name.upper()} ---")
+                        model = BayesianSpatialSmoothing(
+                            points, obs_idx, smoothing_factor=model_params.get('smoothing_factor', 0.1)
+                        )
                         pred = model.posterior_mean()
                         
                     else:
                         print(f"⚠️ Nieznany model: {model_name}")
                         continue
                         
-                    predictions[model_name] = pred
-                    models[model_name] = model
-                    metrics[model_name] = oblicz_metryki(true_probs, pred, model_full_name, verbose=True)
+                    predictions[unique_model_key] = pred
+                    models[unique_model_key] = model
+                    metrics[unique_model_key] = oblicz_metryki(true_probs, pred, model_display_name, verbose=True)
 
                 except Exception as e:
-                    print(f"❌ Błąd podczas uruchamiania modelu {model_full_name}: {e}")
+                    print(f"❌ Błąd podczas uruchamiania modelu {model_display_name}: {e}")
                     import traceback
                     traceback.print_exc()
 
@@ -1390,8 +1398,45 @@ class TestManager:
             
             test_id = None
             if save and len(metrics) >= 2:
-                test_id = self._save_to_database(test_params, metrics, 
-                                               comparison_stats, duration)
+                # Aby zapewnić kompatybilność z istniejącym schematem bazy danych,
+                # który oczekuje parametrów modelu bezpośrednio w `test_params`,
+                # będziemy scalać parametry pierwszego modelu Bayesa (jeśli istnieje)
+                # z ogólnymi parametrami testu.
+                # Jest to kompromis, aby uniknąć zmiany schematu bazy danych.
+                
+                # Initialize with base_params
+                save_test_params = test_params.copy() 
+                
+                # Try to find Bayesian model's params to save
+                bayesian_model_params_for_save = {}
+                for mn, mp in models_to_test:
+                    if mn == 'bayesian':
+                        # Użyj wartości z modelu, jeśli istnieją, w przeciwnym razie domyślne
+                        bayesian_model_params_for_save = mp
+                        break
+                
+                # Domyślne wartości, jeśli model Bayesian nie został znaleziony
+                # lub jeśli brakuje niektórych parametrów w model_params
+                if not bayesian_model_params_for_save:
+                    bayesian_model_params_for_save = {
+                        'lengthscale': 500,
+                        'variance': 1.0,
+                        'distance_unit': "km",
+                        'mcmc_samples': 5000,
+                        'mcmc_burn': 3000,
+                        'mcmc_scale': 0.05,
+                        'mcmc_seed': 42
+                    }
+                # Merge relevant bayesian params into save_test_params for DB compatibility
+                save_test_params['lengthscale'] = bayesian_model_params_for_save.get('lengthscale', 0.0)
+                save_test_params['variance'] = bayesian_model_params_for_save.get('variance', 0.0)
+                save_test_params['mcmc_samples'] = bayesian_model_params_for_save.get('mcmc_samples', 0)
+                save_test_params['mcmc_burn'] = bayesian_model_params_for_save.get('mcmc_burn', 0)
+                save_test_params['mcmc_scale'] = bayesian_model_params_for_save.get('mcmc_scale', 0.0)
+                save_test_params['mcmc_seed'] = bayesian_model_params_for_save.get('mcmc_seed', 0)
+                
+                test_id = self._save_to_database(save_test_params, metrics, 
+                                               comparison_stats, models_to_test, duration)
             
             self._print_test_summary(metrics, comparison_stats, duration)
             
@@ -1475,71 +1520,98 @@ class TestManager:
             'best_mse': best_mse
         }
     
-    def _save_to_database(self, test_params, metrics, comparison_stats, duration):
-        """Zapisuje wyniki do bazy danych"""
-        # Przygotuj słownik z metrykami
-        result_dict = {
-            'bayesian': metrics.get('bayesian', {}),
-            'dirichlet': metrics.get('dirichlet', {}),
-            'gaussian': metrics.get('gaussian', {}),
-            'spatial': metrics.get('spatial', {})
-        }
+    def _save_to_database(self, test_params, metrics, comparison_stats, models_to_test, duration):
+        """Zapisuje wyniki do bazy danych, tworząc osobny wiersz dla każdego modelu."""
         
-        # Utwórz kompletne metryki dla wszystkich modeli
-        complete_metrics = {}
-        for model_name in ['bayesian', 'dirichlet', 'gaussian', 'spatial']:
-            model_metrics = result_dict.get(model_name, {})
-            for metric_name in ['MSE', 'MAE', 'RMSE', 'Correlation', 'Covariance']:
-                key = f'{model_name}_{metric_name.lower()}'
-                complete_metrics[key] = float(model_metrics.get(metric_name, 0.0))
+        test_ids = []
         
-        # Przygotuj porównanie
-        better_counts = comparison_stats.get('better_counts', {})
-        
-        return self.db.save_test_results(
-            test_params, 
-            metrics.get('bayesian', {}),
-            metrics.get('dirichlet', {}),
-            metrics.get('gaussian', {}),
-            metrics.get('spatial', {}),
-            {
-                'bayesian_better_count': better_counts.get('bayesian', 0),
-                'dirichlet_better_count': better_counts.get('dirichlet', 0),
-                'gp_better_count': better_counts.get('gaussian', 0),
-                'spatial_better_count': better_counts.get('spatial', 0),
-                'equal_count': comparison_stats.get('equal_count', 0),
-                'wilcoxon_pvalue': comparison_stats.get('wilcoxon_pvalue', 1.0)
-            },
-            duration
-        )
+        # Stwórz kopię listy, aby można było z niej usuwać elementy
+        remaining_models = list(models_to_test)
+
+        for model_key, model_metrics in metrics.items():
+            model_type = model_key.rsplit('_', 1)[0]
+
+            # Znajdź parametry dla bieżącego modelu
+            current_model_params = {}
+            model_found_index = -1
+            for i, (name, params) in enumerate(remaining_models):
+                if name == model_type:
+                    current_model_params = params
+                    model_found_index = i
+                    break
+            
+            if model_found_index != -1:
+                # Usuń znaleziony model, aby uniknąć ponownego dopasowania
+                remaining_models.pop(model_found_index)
+
+            # Przygotuj parametry do zapisu
+            save_params = test_params.copy()
+            if model_type == 'bayesian':
+                save_params['lengthscale'] = current_model_params.get('lengthscale', 0)
+                save_params['variance'] = current_model_params.get('variance', 0)
+                save_params['mcmc_samples'] = current_model_params.get('mcmc_samples', 0)
+                save_params['mcmc_burn'] = current_model_params.get('mcmc_burn', 0)
+                save_params['mcmc_scale'] = current_model_params.get('mcmc_scale', 0)
+                save_params['mcmc_seed'] = current_model_params.get('mcmc_seed', 0)
+            
+            # Przygotuj puste metryki dla wszystkich typów modeli
+            metrics_bayesian = {}
+            metrics_dirichlet = {}
+            metrics_gp = {}
+            metrics_spatial = {}
+
+            # Wypełnij metryki dla odpowiedniego typu modelu
+            if model_type == 'bayesian':
+                metrics_bayesian = model_metrics
+            elif model_type == 'dirichlet':
+                metrics_dirichlet = model_metrics
+            elif model_type == 'gaussian':
+                metrics_gp = model_metrics
+            elif model_type == 'spatial':
+                metrics_spatial = model_metrics
+
+            # Statystyki porównawcze są obliczane dla całego przebiegu testu,
+            # więc zapisujemy je w każdym wierszu (będą zduplikowane).
+            test_id = self.db.save_test_results(
+                save_params,
+                metrics_bayesian,
+                metrics_dirichlet,
+                metrics_gp,
+                metrics_spatial,
+                comparison_stats,
+                duration
+            )
+            test_ids.append(test_id)
+            
+        return test_ids
     
     def _print_test_summary(self, metrics, comparison_stats, duration):
-        """Wyświetla podsumowanie testu"""
+        """Wyświetla podsumowanie testu, obsługując unikalne klucze modeli."""
         print(f"\n📈 PODSUMOWANIE TESTU:")
         print(f"   - Czas trwania: {duration:.1f}s")
         
         if metrics:
             print(f"\n   MSE:")
-            for model_name, model_metrics in metrics.items():
-                print(f"     - {model_name.capitalize():15s}: {model_metrics.get('MSE', 'N/A'):.6f}")
+            for model_key, model_metrics in metrics.items():
+                print(f"     - {model_key.capitalize():15s}: {model_metrics.get('MSE', 'N/A'):.6f}")
             
             print(f"\n   MAE:")
-            for model_name, model_metrics in metrics.items():
-                print(f"     - {model_name.capitalize():15s}: {model_metrics.get('MAE', 'N/A'):.6f}")
+            for model_key, model_metrics in metrics.items():
+                print(f"     - {model_key.capitalize():15s}: {model_metrics.get('MAE', 'N/A'):.6f}")
         
-        if 'best_model' in comparison_stats:
+        if comparison_stats.get('best_model'):
             print(f"\n   NAJLEPSZY MODEL: {comparison_stats['best_model'].capitalize()} "
                   f"(MSE={comparison_stats.get('best_mse', 'N/A'):.6f})")
         
         if 'better_counts' in comparison_stats:
             print(f"\n   LICZBA PUNKTÓW Z NAJLEPSZYM WYNIKIEM:")
-            for model_name, count in comparison_stats['better_counts'].items():
-                print(f"     - {model_name.capitalize():15s}: {count}")
+            for model_key, count in comparison_stats['better_counts'].items():
+                print(f"     - {model_key.capitalize():15s}: {count}")
             if comparison_stats.get('equal_count', 0) > 0:
                 print(f"     - Równe wyniki: {comparison_stats['equal_count']}")
         
         if comparison_stats.get('wilcoxon_pvalue') is not None:
-            print(f"   - Wilcoxon p-value: {comparison_stats['wilcoxon_pvalue']:.4f}")
+            print(f"   - Wilcoxon p-value: {comparison_stats.get('wilcoxon_pvalue'):.4f}")
     
     def clear_cache(self):
         """Czyści cache danych"""
@@ -1678,271 +1750,130 @@ class TestManager:
         """Tworzy wykresy wyników badania wpływu liczby obserwacji"""
         if not results:
             return
-    
-        # DEBUG: Sprawdź co jest w wynikach
-        print(f"\n🔍 DEBUG: Analiza wyników do wykresów")
-        print(f"Liczba wyników: {len(results)}")
-    
-        for i, result in enumerate(results):
-            if result['success']:
-                print(f"\nWynik {i+1}: n_obs={result.get('n_observations', 'brak')}")
-                if 'metrics' in result:
-                    for model_name, metrics in result['metrics'].items():
-                        print(f"  {model_name}: {list(metrics.keys())}")
-    
-        # Przygotuj dane - ZBIERZ WSZYSTKIE METRYKI
+            
         data = []
         for result in results:
-            if not result['success']:
+            if not result.get('success'):
                 continue
-        
+            
             n_obs = result.get('n_observations', 0)
             row = {'n_observations': n_obs}
-        
-            # Dodaj WSZYSTKIE metryki dla każdego modelu
+            
             if 'metrics' in result:
-                for model_name, metrics in result['metrics'].items():
-                    for metric_name, value in metrics.items():
-                        if isinstance(value, (int, float)):
+                for model_name, metrics_dict in result['metrics'].items():
+                    for metric_name, value in metrics_dict.items():
+                        if isinstance(value, (int, float, np.number)):
                             row[f"{model_name}_{metric_name.lower()}"] = float(value)
-                        elif isinstance(value, np.ndarray):
-                            # Pomijaj tablice
-                            pass
-        
             data.append(row)
-    
+
         if not data:
             print("⚠️ Brak danych do wykreślenia")
             return
-    
+
         df = pd.DataFrame(data)
         df = df.sort_values('n_observations')
-    
-        # DEBUG: Pokaż dostępne kolumny
-        print(f"\n📊 Dostępne kolumny w danych:")
-        print(df.columns.tolist())
-    
-        # Utwórz wykresy 2x2
+
         fig, axes = plt.subplots(2, 2, figsize=(15, 12))
         fig.suptitle('Wpływ liczby obserwacji na jakość predykcji', 
-                    fontsize=16, fontweight='bold')
-    
-        model_colors = {'bayesian': 'b', 'dirichlet': 'r', 
-                       'gaussian': 'g', 'spatial': 'm'}
-    
+                     fontsize=16, fontweight='bold')
+        
+        model_colors = {'bayesian': 'b', 'dirichlet': 'r', 'gaussian': 'g', 'spatial': 'm'}
+        
         # 1. MSE vs liczba obserwacji
         ax = axes[0, 0]
         mse_plotted = False
-        mse_models = []
-    
-        for model_name in df.columns:
-            if model_name.endswith('_mse'):
-                model = model_name.replace('_mse', '')
-                if model in model_colors:
-                    # Sprawdź czy są dane (nie wszystkie NaN)
-                    if not df[model_name].isna().all():
-                        ax.plot(df['n_observations'], df[model_name], 
-                               color=model_colors[model], marker='o', 
-                               label=model.capitalize(), linewidth=2)
-                        mse_plotted = True
-                        mse_models.append(model)
-    
+        for col_name in df.columns:
+            if col_name.endswith('_mse'):
+                model_key = col_name.replace('_mse', '')
+                model_base = model_key.rsplit('_', 1)[0]
+                if model_base in model_colors and not df[col_name].isna().all():
+                    ax.plot(df['n_observations'], df[col_name], 
+                            color=model_colors[model_base], marker='o', 
+                            label=model_key.capitalize(), linewidth=2)
+                    mse_plotted = True
+        
         if mse_plotted:
             ax.set_xlabel('Liczba obserwacji')
             ax.set_ylabel('MSE')
-            ax.set_title(f'MSE vs liczba obserwacji\n(modele: {", ".join(mse_models)})')
+            ax.set_title('MSE vs liczba obserwacji')
             ax.legend()
             ax.grid(True, alpha=0.3)
             ax.set_yscale('log')
             ax.set_xscale('log')
         else:
-            ax.text(0.5, 0.5, 'Brak danych MSE', 
-                   ha='center', va='center', transform=ax.transAxes, fontsize=12)
-            ax.set_title('MSE - brak danych')
-    
-        # 2. Różnica MSE między Bayesian a Dirichlet (jeśli oba są dostępne)
+            ax.text(0.5, 0.5, 'Brak danych MSE', ha='center', va='center', transform=ax.transAxes)
+
+        # 2. Różnica MSE
         ax = axes[0, 1]
-        if 'bayesian_mse' in df.columns and 'dirichlet_mse' in df.columns:
-            # Sprawdź czy są prawidłowe dane
-            if not df['bayesian_mse'].isna().all() and not df['dirichlet_mse'].isna().all():
-                mse_diff = df['bayesian_mse'] - df['dirichlet_mse']
-                ax.plot(df['n_observations'], mse_diff, 'g-', marker='^', linewidth=2)
-                ax.axhline(y=0, color='k', linestyle='--', alpha=0.5)
-                ax.set_xlabel('Liczba obserwacji')
-                ax.set_ylabel('Różnica MSE (Bayesian - Dirichlet)')
-                ax.set_title('Różnica MSE: Bayesian vs Dirichlet')
-                ax.grid(True, alpha=0.3)
-                ax.set_xscale('log')
-            
-                # Dodaj informację o trendzie
-                if len(mse_diff) > 1:
-                    trend = "malejący" if mse_diff.iloc[-1] < mse_diff.iloc[0] else "rosnący"
-                    ax.text(0.05, 0.95, f'Trend: {trend}', 
-                           transform=ax.transAxes, fontsize=10,
-                           verticalalignment='top',
-                           bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
-            else:
-                ax.text(0.5, 0.5, 'Brak kompletnych danych\nBayesian/Dirichlet MSE', 
-                       ha='center', va='center', transform=ax.transAxes, fontsize=12)
-                ax.set_title('Różnica MSE - niekompletne dane')
+        bayesian_col = next((c for c in df.columns if c.startswith('bayesian') and c.endswith('_mse')), None)
+        dirichlet_col = next((c for c in df.columns if c.startswith('dirichlet') and c.endswith('_mse')), None)
+
+        if bayesian_col and dirichlet_col and not df[bayesian_col].isna().all() and not df[dirichlet_col].isna().all():
+            mse_diff = df[bayesian_col] - df[dirichlet_col]
+            ax.plot(df['n_observations'], mse_diff, 'g-', marker='^', linewidth=2)
+            ax.axhline(y=0, color='k', linestyle='--', alpha=0.5)
+            ax.set_xlabel('Liczba obserwacji')
+            ax.set_ylabel('Różnica MSE')
+            ax.set_title(f'Różnica MSE: {bayesian_col} vs {dirichlet_col}')
+            ax.grid(True, alpha=0.3)
+            ax.set_xscale('log')
         else:
-            ax.text(0.5, 0.5, 'Brak danych dla porównania\nBayesian/Dirichlet', 
-                   ha='center', va='center', transform=ax.transAxes, fontsize=12)
-            ax.set_title('Różnica MSE - brak danych')
-    
+            ax.text(0.5, 0.5, 'Brak danych do porównania MSE', ha='center', va='center', transform=ax.transAxes)
+
         # 3. MAE vs liczba obserwacji
         ax = axes[1, 0]
         mae_plotted = False
-        mae_models = []
-    
-        for model_name in df.columns:
-            if model_name.endswith('_mae'):
-                model = model_name.replace('_mae', '')
-                if model in model_colors:
-                    # Sprawdź czy są dane
-                    if model_name in df.columns and not df[model_name].isna().all():
-                        ax.plot(df['n_observations'], df[model_name], 
-                               color=model_colors[model], marker='s', 
-                               label=model.capitalize(), linewidth=2)
-                        mae_plotted = True
-                        mae_models.append(model)
-    
+        for col_name in df.columns:
+            if col_name.endswith('_mae'):
+                model_key = col_name.replace('_mae', '')
+                model_base = model_key.rsplit('_', 1)[0]
+                if model_base in model_colors and not df[col_name].isna().all():
+                    ax.plot(df['n_observations'], df[col_name], 
+                            color=model_colors[model_base], marker='s', 
+                            label=model_key.capitalize(), linewidth=2)
+                    mae_plotted = True
+        
         if mae_plotted:
             ax.set_xlabel('Liczba obserwacji')
             ax.set_ylabel('MAE')
-            ax.set_title(f'MAE vs liczba obserwacji\n(modele: {", ".join(mae_models)})')
+            ax.set_title('MAE vs liczba obserwacji')
             ax.legend()
             ax.grid(True, alpha=0.3)
             ax.set_yscale('log')
             ax.set_xscale('log')
         else:
-            # Sprawdź czy może są inne metryki do pokazania
-            alt_metric = None
-            for metric in ['rmse', 'covariance']:
-                metric_models = []
-                for model_name in df.columns:
-                    if model_name.endswith(f'_{metric}'):
-                        model = model_name.replace(f'_{metric}', '')
-                        if model in model_colors:
-                            metric_models.append(model)
-            
-                if metric_models:
-                    alt_metric = metric
-                    break
-        
-            if alt_metric:
-                # Rysuj alternatywną metrykę
-                alt_plotted = False
-                for model_name in df.columns:
-                    if model_name.endswith(f'_{alt_metric}'):
-                        model = model_name.replace(f'_{alt_metric}', '')
-                        if model in model_colors:
-                            if not df[model_name].isna().all():
-                                label = f"{model.capitalize()} ({alt_metric.upper()})"
-                                ax.plot(df['n_observations'], df[model_name], 
-                                       color=model_colors[model], marker='d', 
-                                       label=label, linewidth=2)
-                                alt_plotted = True
-            
-                if alt_plotted:
-                    ax.set_xlabel('Liczba obserwacji')
-                    ax.set_ylabel(alt_metric.upper())
-                    ax.set_title(f'{alt_metric.upper()} vs liczba obserwacji')
-                    ax.legend()
-                    ax.grid(True, alpha=0.3)
-                    ax.set_xscale('log')
-                else:
-                    ax.text(0.5, 0.5, 'Brak danych MAE', 
-                           ha='center', va='center', transform=ax.transAxes, fontsize=12)
-                    ax.set_title('MAE - brak danych')
-            else:
-                ax.text(0.5, 0.5, 'Brak danych MAE', 
-                       ha='center', va='center', transform=ax.transAxes, fontsize=12)
-                ax.set_title('MAE - brak danych')
-    
+            ax.text(0.5, 0.5, 'Brak danych MAE', ha='center', va='center', transform=ax.transAxes)
+
         # 4. Korelacja vs liczba obserwacji
         ax = axes[1, 1]
         corr_plotted = False
-        corr_models = []
-    
-        for model_name in df.columns:
-            if model_name.endswith('_correlation'):
-                model = model_name.replace('_correlation', '')
-                if model in model_colors:
-                    # Sprawdź czy są dane
-                    if model_name in df.columns and not df[model_name].isna().all():
-                        ax.plot(df['n_observations'], df[model_name], 
-                               color=model_colors[model], marker='x', 
-                               label=model.capitalize(), linewidth=2)
-                        corr_plotted = True
-                        corr_models.append(model)
-    
+        for col_name in df.columns:
+            if col_name.endswith('_correlation'):
+                model_key = col_name.replace('_correlation', '')
+                model_base = model_key.rsplit('_', 1)[0]
+                if model_base in model_colors and not df[col_name].isna().all():
+                    ax.plot(df['n_observations'], df[col_name], 
+                            color=model_colors[model_base], marker='x', 
+                            label=model_key.capitalize(), linewidth=2)
+                    corr_plotted = True
+
         if corr_plotted:
             ax.set_xlabel('Liczba obserwacji')
             ax.set_ylabel('Korelacja')
-            ax.set_title(f'Korelacja vs liczba obserwacji\n(modele: {", ".join(corr_models)})')
+            ax.set_title('Korelacja vs liczba obserwacji')
             ax.legend()
             ax.grid(True, alpha=0.3)
             ax.set_xscale('log')
-        
-            # Dodaj linię na poziomie 0
-            ax.axhline(y=0, color='k', linestyle='--', alpha=0.3)
         else:
-            # Sprawdź czy może jest kowariancja
-            cov_plotted = False
-            cov_models = []
+            ax.text(0.5, 0.5, 'Brak danych korelacji', ha='center', va='center', transform=ax.transAxes)
+
+        plt.tight_layout(rect=[0, 0, 1, 0.96])
         
-            for model_name in df.columns:
-                if model_name.endswith('_covariance'):
-                    model = model_name.replace('_covariance', '')
-                    if model in model_colors:
-                        if model_name in df.columns and not df[model_name].isna().all():
-                            ax.plot(df['n_observations'], df[model_name], 
-                                   color=model_colors[model], marker='*', 
-                                   label=f"{model.capitalize()} (kow.)", linewidth=2)
-                            cov_plotted = True
-                            cov_models.append(model)
-        
-            if cov_plotted:
-                ax.set_xlabel('Liczba obserwacji')
-                ax.set_ylabel('Kowariancja')
-                ax.set_title(f'Kowariancja vs liczba obserwacji\n(modele: {", ".join(cov_models)})')
-                ax.legend()
-                ax.grid(True, alpha=0.3)
-                ax.set_xscale('log')
-            
-                # Dodaj linię na poziomie 0
-                ax.axhline(y=0, color='k', linestyle='--', alpha=0.3)
-            else:
-                ax.text(0.5, 0.5, 'Brak danych korelacji/kowariancji', 
-                       ha='center', va='center', transform=ax.transAxes, fontsize=12)
-                ax.set_title('Korelacja/Kowariancja - brak danych')
-    
-        plt.tight_layout()
-    
-        # Zapisz wykres
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         plot_file = f"observation_length_impact_{timestamp}.png"
         plt.savefig(plot_file, dpi=150, bbox_inches='tight')
         plt.show()
-    
         print(f"\n  ✔ Wykresy zapisane do: {plot_file}")
-    
-        # Dodatkowo wypisz statystyki
-        print(f"\n📈 PODSUMOWANIE DANYCH:")
-        for col in df.columns:
-            if col != 'n_observations':
-                if not df[col].isna().all():
-                    non_nan = df[col].dropna()
-                    if len(non_nan) > 0:
-                        model_metric = col.split('_')
-                        if len(model_metric) >= 2:
-                            model = model_metric[0]
-                            metric = '_'.join(model_metric[1:])
-                            print(f"  - {model}.{metric}: "
-                                  f"n={len(non_nan)}, "
-                                  f"min={non_nan.min():.3e}, "
-                                  f"max={non_nan.max():.3e}")
 def convert_to_serializable(obj):
         """Konwertuje obiekt na format możliwy do zapisania w JSON"""
         if hasattr(obj, 'dtype'):  # Sprawdź czy to obiekt numpy
@@ -2025,22 +1956,94 @@ def program(base_params, n_tests, csv_path, models_to_test=None, save=False, xd=
 #endregion
 #Parametry
 if __name__ == "__main__":
+    # ==================================================================
+    # --- KONFIGURACJA TESTÓW ---
+    # ==================================================================
+    
+    # Ścieżka do pliku CSV z danymi
     csv_path = r"C:\Users\User\Downloads\Global_2020_MarineSpeciesRichness_AquaMaps.csv"
     
+    # Podstawowe parametry dla wszystkich testów (ogólne, nie specyficzne dla modelu)
     base_params = {
-        'cutoff_km': 1000,
-        'co_ktory': 100,
-        'n_observations': 50000,
-        'lengthscale': 5000,
-        'variance': 1.0,
-        'distance_unit': "km",
-        'mcmc_samples': 5000,
-        'mcmc_burn': 3000,
-        'mcmc_scale': 0.05,
-        'mcmc_seed': 42,
-        'n_points': 0 
+        'cutoff_km': 1000,      # Odcięcie od brzegu w km
+        'co_ktory': 100,        # Redukcja siatki (co n-ty punkt)
+        'n_observations': 50000,# Domyślna liczba obserwacji
+        'n_points': 0           # (nie edytować, ustawiane automatycznie)
     }
     
-    # Określ które modele testować
-    program(base_params, n_tests=2, csv_path=csv_path, 
-            save=False, xd={"rt":False,"it":True})
+    # Modele do uruchomienia w standardowej serii testów (`run_tests`)
+    # Format: lista krotek [('nazwa_modelu', {parametry_modelu}), ...]
+    models_to_test = [
+        ('bayesian', {
+            'lengthscale': 500,
+            'variance': 1.0,
+            'distance_unit': "km",
+            'mcmc_samples': 5000,
+            'mcmc_burn': 3000,
+            'mcmc_scale': 0.05,
+            'mcmc_seed': 42
+        }),
+        ('bayesian', {
+            'lengthscale': 5000,
+            'variance': 1.0,
+            'distance_unit': "km",
+            'mcmc_samples': 5000,
+            'mcmc_burn': 3000,
+            'mcmc_scale': 0.05,
+            'mcmc_seed': 42
+        }),
+        ('dirichlet', {}),
+        ('spatial', {'smoothing_factor': 0.1})
+        # ('gaussian', {
+        #     'lengthscale_prior': (1000, 500),
+        #     'variance_prior': (2, 1),
+        #     'n_samples': 1000,
+        #     'burn_in': 500,
+        #     'step_size': 0.1
+        # }) # Odkomentuj, aby dodać model GP (wolny)
+    ]
+    
+    # Modele do uruchomienia w teście wpływu liczby obserwacji (`test_observation_length_impact`)
+    impact_models_to_test = [
+        ('bayesian', {
+            'lengthscale': 500,
+            'variance': 1.0,
+            'distance_unit': "km",
+            'mcmc_samples': 5000,
+            'mcmc_burn': 3000,
+            'mcmc_scale': 0.05,
+            'mcmc_seed': 42
+        }),
+        ('bayesian', {
+            'lengthscale': 5000,
+            'variance': 1.0,
+            'distance_unit': "km",
+            'mcmc_samples': 5000,
+            'mcmc_burn': 3000,
+            'mcmc_scale': 0.05,
+            'mcmc_seed': 42
+        }),
+        ('dirichlet', {}),
+        ('spatial', {'smoothing_factor': 0.1})
+    ]
+
+    # --- USTAWIENIA URUCHOMIENIA ---
+    
+    n_tests = 2  # Liczba testów w standardowej serii
+    save_results = False  # Czy zapisać wyniki do pliku CSV
+    
+    # Które części programu uruchomić?
+    # "rt": True -> uruchom `run_tests`
+    # "it": True -> uruchom `test_observation_length_impact`
+    run_options = {"rt": False, "it": True}
+
+    # ==================================================================
+    # --- URUCHOMIENIE PROGRAMU ---
+    # ==================================================================
+    program(base_params, 
+            n_tests=n_tests, 
+            csv_path=csv_path, 
+            models_to_test=models_to_test,
+            impact_models_to_test=impact_models_to_test,
+            save=save_results, 
+            xd=run_options)
