@@ -281,69 +281,108 @@ class BayesianFieldModel:
 
 class BayesianFieldModelGridSearch(BayesianFieldModel):
     def __init__(self, space_points, metric_func, observed_indices,
-                 variance, distance_unit='km', lengthscale_grid=None):
+                 variance, distance_unit='km', lengthscale_grid=None): # Podpis zachowany dla kompatybilności
         
-        # Inicjalizuj z tymczasowym lengthscale=1; zostanie on nadpisany
         super().__init__(space_points, metric_func, observed_indices, 1, variance, distance_unit)
-        self.lengthscale_grid = lengthscale_grid or [5000, 4500, 6500, 5500, 6000]
-        print(f"\n▶ [GRID-SEARCH MODEL] Inicjalizacja z siatką lengthscale: {self.lengthscale_grid}")
+        # lengthscale_grid nie jest już potrzebny, ale zostaje w sygnaturze
+        print(f"\n▶ [ADAPTIVE-SEARCH MODEL] Inicjalizacja.")
+
+    def _evaluate_lengthscale(self, ls, w_initial):
+        """Funkcja pomocnicza do oceny danego 'lengthscale'."""
+        try:
+            p1 = self.space_points[0]
+            Sigma_w = np.zeros((self.m, self.m))
+            for i in range(self.m):
+                pi = self.space_points[i+1]
+                d_i1 = self.metric(pi, p1, return_unit=self.distance_unit) / ls
+                Sigma_w[i, i] = d_i1
+                for j in range(i+1, self.m):
+                    pj = self.space_points[j+1]
+                    d_j1 = self.metric(pj, p1, return_unit=self.distance_unit) / ls
+                    d_ij = self.metric(pi, pj, return_unit=self.distance_unit) / ls
+                    cov_ij = (d_i1 + d_j1 - d_ij) / 2.0
+                    Sigma_w[i, j] = cov_ij
+                    Sigma_w[j, i] = cov_ij
+            
+            mvn_u_temp = MultivariateNormalCholesky(Sigma_w)
+            # Użyj krótkiego MCMC do oceny
+            # To jest bardziej wiarygodne niż tylko log_posterior w punkcie startowym
+            temp_model = BayesianFieldModel(self.space_points, self.metric, self.observed_indices, ls, self.variance, self.distance_unit)
+            temp_model.przygotuj_apriori()
+            temp_model.przygotuj_predykcyjny(num_samples=100, burn_in=50, proposal_scale=0.05, seed=42)
+            
+            # Użyjemy średniego log-posterior z krótkiego przebiegu jako score
+            log_post_samples = [log_posterior_fast(w, self.counts_f, temp_model.mvn_u.L, temp_model.mvn_u.log_norm_const) for w in temp_model.samples_w]
+            score = np.mean(log_post_samples) if log_post_samples else -np.inf
+
+            print(f"  - Testuję lengthscale={ls}: wynik={score:.2f}")
+            return score
+        except Exception as e:
+            print(f"  - Błąd przy lengthscale={ls}: {e}")
+            return -np.inf
 
     def przygotuj_apriori(self):
-        print("▶ [GRID SEARCH] Rozpoczynanie K-krotnej walidacji krzyżowej dla 'lengthscale'...")
+        print("▶ [ADAPTIVE SEARCH] Rozpoczynanie adaptacyjnego poszukiwania 'lengthscale'...")
+        w_initial = self.znajdz_dobry_punkt_startowy()
+        self.counts_f = self.counts.astype(np.float64)
         
-        K = 5
-        shuffled_indices = np.random.permutation(self.observed_indices)
-        folds = np.array_split(shuffled_indices, K)
+        # --- Faza 1: Zgrubne poszukiwanie ---
+        start_ls = 3000
+        step = 1000
+        max_steps = 10
         
-        best_ls = -1
-        best_avg_score = -np.inf
+        ls_prev = start_ls
+        score_prev = self._evaluate_lengthscale(ls_prev, w_initial)
         
-        for ls in self.lengthscale_grid:
-            fold_scores = []
-            print(f"--- Testuję lengthscale = {ls} ---")
+        peak_ls = ls_prev
+        
+        for i in range(1, max_steps):
+            ls_curr = ls_prev + step
+            score_curr = self._evaluate_lengthscale(ls_curr, w_initial)
             
-            for k in range(K):
-                val_indices = folds[k]
-                train_indices_list = [folds[i] for i in range(K) if i != k]
-                train_indices = np.concatenate(train_indices_list)
-
-                print(f"  Fold {k+1}/{K}: Trening na {len(train_indices)} obserwacjach...")
-                
-                try:
-                    temp_model = BayesianFieldModel(
-                        space_points=self.space_points,
-                        metric_func=self.metric,
-                        observed_indices=train_indices,
-                        lengthscale=ls,
-                        variance=self.variance,
-                        distance_unit=self.distance_unit
-                    )
-                    
-                    temp_model.przygotuj_apriori()
-                    temp_model.przygotuj_predykcyjny(num_samples=1000, burn_in=500, proposal_scale=0.05, seed=42)
-                    
-                    pred_probs = temp_model.posterior_mean()
-                    
-                    # Log-Likelihood on validation set
-                    score = np.sum(np.log(pred_probs[val_indices] + 1e-9))
-                    fold_scores.append(score)
-                    print(f"    Fold {k+1} score: {score:.2f}")
-                except Exception as e:
-                    print(f"    Fold {k+1} BŁĄD: {e}")
-                    fold_scores.append(-np.inf)
-
-            avg_score = np.mean(fold_scores)
-            print(f"  > Średni wynik dla lengthscale={ls}: {avg_score:.2f}\n")
+            if score_curr < score_prev:
+                peak_ls = ls_prev # Poprzedni był lepszy
+                break
             
-            if avg_score > best_avg_score:
-                best_avg_score = avg_score
-                best_ls = ls
-
-        if best_ls == -1:
-            raise ValueError("Grid search z walidacją krzyżową nie znalazł poprawnego 'lengthscale'.")
+            score_prev = score_curr
+            ls_prev = ls_curr
+            peak_ls = ls_curr # Na wypadek, gdybyśmy osiągnęli max_steps
         
-        print(f"✅ Najlepszy 'lengthscale' znaleziony przez walidację krzyżową: {best_ls} (wynik: {best_avg_score:.2f})")
-        self.lengthscale = best_ls
+        print(f"  ✔ Zgrubne optimum znalezione w okolicy: {peak_ls}")
+
+        # --- Faza 2: Rekurencyjne zawężanie ---
+        current_best_ls = peak_ls
+        search_interval = 500
+        max_recursive_steps = 5
+        
+        for i in range(max_recursive_steps):
+            if search_interval < 100:
+                print("  ✔ Osiągnięto minimalny interwał. Koniec poszukiwania.")
+                break
+            
+            print(f"\n  --- Krok zawężania {i+1}, interwał: {search_interval} ---")
+            
+            points_to_test = {
+                current_best_ls - search_interval,
+                current_best_ls,
+                current_best_ls + search_interval
+            }
+            
+            # Ocena punktów - z cache'owaniem wyników
+            scores = {ls: self._evaluate_lengthscale(ls, w_initial) for ls in sorted(list(points_to_test))}
+            
+            # Znajdź najlepszy
+            best_ls_in_step = max(scores, key=scores.get)
+            
+            if best_ls_in_step == current_best_ls:
+                print("  ✔ Optimum znalezione w środku interwału. Koniec poszukiwania.")
+                break
+            
+            current_best_ls = best_ls_in_step
+            search_interval //= 2
+        
+        self.lengthscale = current_best_ls
+        print(f"✅ Najlepszy 'lengthscale' znaleziony przez adaptacyjne poszukiwanie: {self.lengthscale}")
         
         print("\n▶ [APRIORI] Finalne przygotowanie z najlepszym 'lengthscale'...")
         super().przygotuj_apriori()
@@ -1983,7 +2022,7 @@ if __name__ == "__main__":
             'mcmc_scale': 0.05,
             'mcmc_seed': 42
         }),
-        ('dirichlet', {}),
+        ('dirichlet', {}),do
         ('spatial', {'smoothing_factor': 0.1})
     ]
 
