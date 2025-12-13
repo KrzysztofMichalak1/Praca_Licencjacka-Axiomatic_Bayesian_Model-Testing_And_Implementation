@@ -3,7 +3,7 @@
 def get_configuration():
     """Returns the default configuration dictionary."""
     return {
-        'csv_path': r"C:\Users\User\Downloads\Global_2020_MarineSpeciesRichness_AquaMaps.csv",
+        'csv_path': r"Global_2020_MarineSpeciesRichness_AquaMaps (4).csv",
         'base_params': {
             'cutoff_km': 1000,
             'co_ktory': 200,
