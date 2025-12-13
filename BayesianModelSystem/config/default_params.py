@@ -7,12 +7,12 @@ def get_configuration():
         'base_params': {
             'cutoff_km': 1000,
             'co_ktory': 200,
-            'n_observations': 50000,
+            'n_observations': 2000,
             'n_points': 0
         },
         'models_to_test': [
-            ('bayesian', {
-                'lengthscale': 500,
+             ('logistic_normal_mcmc', {
+                'lengthscale': 1750,
                 'variance': 1.0,
                 'distance_unit': "km",
                 'mcmc_samples': 5000,
@@ -29,8 +29,8 @@ def get_configuration():
                 'mcmc_scale': 0.05,
                 'mcmc_seed': 42
             }),
-            ('dirichlet', {}),
-            ('spatial', {'smoothing_factor': 0.1})
+            #('dirichlet', {}),
+            #('spatial', {'smoothing_factor': 0.1})
         ],
         'impact_models_to_test': [
             ('bayesian', {

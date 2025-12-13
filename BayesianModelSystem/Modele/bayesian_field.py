@@ -517,7 +517,7 @@ class LogisticNormalMCMC:
     with an interface consistent with other models in this module.
     """
     def __init__(self, space_points, metric_func, observed_indices,
-                 lengthscale=1000.0, variance=1.0, distance_unit='km',
+                 lengthscale=50.0, variance=1.0, distance_unit='km',
                  mu_prior=0.0):
         print("\n▶ [LOGISTIC-NORMAL-MCMC] Inicjalizacja modelu...")
         self.space_points = list(space_points)
@@ -573,20 +573,37 @@ class LogisticNormalMCMC:
                 raise ValueError("Macierz kowariancji nie jest dodatnio określona.")
             self.log_prior_norm_const = -0.5 * (self.n * np.log(2 * np.pi) + logdet)
 
+    def _log_posterior(self, Z):
+        """
+        Poprawione log-posterior dla multinomial logistic-normal.
+        
+        Prior: Z ~ N(mu_prior, K)
+        Wiara: counts ~ Multinomial(N, softmax(Z))
+        """
+        # Term priora (Gauss)
+        diff = Z - self.mu_prior
+        prior_term = -0.5 * diff.T @ self.K_inv @ diff + self.log_prior_norm_const
+        
+        # Term wiarygodności (multinomial)
+        p = np.exp(Z - np.max(Z))  # stabilność numeryczna
+        p = p / np.sum(p)
+        likelihood_term = np.sum(self.counts * np.log(p + 1e-12))
+        
+        return prior_term + likelihood_term
+
     def przygotuj_predykcyjny(self, num_samples, burn_in, proposal_scale, seed=None):
         print("\n" + "="*70)
         print("▶ [MCMC] START SAMPLERA DLA MODELU LOGISTIC-NORMAL")
         print("="*70)
 
-        if seed is not None: np.random.seed(seed)
+        if seed is not None: 
+            np.random.seed(seed)
         
         if self.K_inv is None:
             raise RuntimeError("Należy najpierw uruchomić 'przygotuj_apriori'.")
 
         Z_current = np.full(self.n, self.mu_prior)
-        logpost_current = log_posterior_logistic_normal_fast(
-            Z_current, self.counts, self.N, self.K_inv, self.log_prior_norm_const, self.mu_prior
-        )
+        logpost_current = self._log_posterior(Z_current)
 
         cov_prop = (proposal_scale**2) * self.K
         try:
@@ -613,9 +630,7 @@ class LogisticNormalMCMC:
             z_norm = np.random.normal(0, 1, self.n)
             Z_prop = Z_current + L_prop @ z_norm
 
-            logpost_prop = log_posterior_logistic_normal_fast(
-                Z_prop, self.counts, self.N, self.K_inv, self.log_prior_norm_const, self.mu_prior
-            )
+            logpost_prop = self._log_posterior(Z_prop)
 
             accept = False
             if np.isfinite(logpost_prop):
@@ -626,7 +641,8 @@ class LogisticNormalMCMC:
             if accept:
                 Z_current = Z_prop
                 logpost_current = logpost_prop
-                if i >= burn_in: accepted += 1
+                if i >= burn_in: 
+                    accepted += 1
         
             if i >= burn_in:
                 samples.append(Z_current.copy())
@@ -639,7 +655,13 @@ class LogisticNormalMCMC:
         
         self.samples_Z = np.array(samples)
         if len(self.samples_Z) > 0:
-            self.samples_x = np.array([z_to_x_softmax(z_sample) for z_sample in self.samples_Z])
+            # Transformacja Z -> p (softmax)
+            self.samples_x = []
+            for z_sample in self.samples_Z:
+                p = np.exp(z_sample - np.max(z_sample))
+                p = p / np.sum(p)
+                self.samples_x.append(p)
+            self.samples_x = np.array(self.samples_x)
         else:
             self.samples_x = np.array([])
         
