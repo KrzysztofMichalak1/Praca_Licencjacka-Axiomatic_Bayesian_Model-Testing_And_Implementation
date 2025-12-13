@@ -40,33 +40,31 @@ def get_configuration():
                 'mcmc_samples': 5000,
                 'mcmc_burn': 3000,
                 'mcmc_scale': 0.05,
-                'mcmc_seed': 42
             }),
-           ('bayesian_adaptive_search_binary', {
-                'variance': 1.0,
-                'distance_unit': "km",
-                'start_ls': 4000,
-                'step_size': 4000,
-                'k_steps': 6,
-                'num_samples_search': 300,
-                'burn_in_search': 50,
-                'proposal_scale_search': 0.05,
-                'mcmc_samples': 5000,
-                'mcmc_burn': 3000,
-                'mcmc_scale': 0.05,
-                'mcmc_seed': 42
-            }),
+           # ('bayesian_adaptive_search_binary', {
+           #      'variance': 1.0,
+           #      'distance_unit': "km",
+           #      'start_ls': 8000,
+           #      'step_size': 8000,
+           #      'k_steps': 6,
+           #      'num_samples_search': 300,
+           #      'burn_in_search': 150,
+           #      'proposal_scale_search': 0.05,
+           #      'mcmc_samples': 5000,
+           #      'mcmc_burn': 3000,
+           #      'mcmc_scale': 0.05,
+           #      'mcmc_seed': 42
+           #  }),
             ('logistic_normal_mcmc', {
-                'lengthscale': 5000,
+                'lengthscale': 750,
                 'variance': 1.0,
                 'distance_unit': "km",
                 'mcmc_samples': 5000,
                 'mcmc_burn': 3000,
                 'mcmc_scale': 0.05,
-                'mcmc_seed': 42
             }),
-            ('dirichlet', {}),
-            ('spatial', {'smoothing_factor': 0.1})
+            #('dirichlet', {}),
+            #('spatial', {'smoothing_factor': 0.1})
         ],
         'n_tests': 2,
         'save_results': False,

@@ -1,7 +1,7 @@
 """This module contains the main program logic."""
 from .TestMenager.test_manager import TestManager
 
-def program(base_params, n_tests, csv_path, models_to_test=None, save_results=False, run_options={"rt":False,"it":False}, impact_models_to_test=None):
+def program(base_params, n_tests, csv_path, models_to_test=None, save_results=False, run_options={"rt":False,"it":False}, impact_models_to_test=None, k=10):
     """Main program function."""
     print("================================================")
     print("🎯 SYSTEM TESTOWANIA MODELI BAYESOWSKICH")
@@ -48,7 +48,7 @@ def program(base_params, n_tests, csv_path, models_to_test=None, save_results=Fa
         print(f"MODELE W TEŚCIE WPŁYWU: {', '.join(active_impact)}")
         
         test_manager.test_observation_length_impact(
-            base_params, models_to_test=impact_models_to_test, save=save_results
+            base_params, models_to_test=impact_models_to_test, k=k, save=save_results
         )
     
     print("\n================================================")

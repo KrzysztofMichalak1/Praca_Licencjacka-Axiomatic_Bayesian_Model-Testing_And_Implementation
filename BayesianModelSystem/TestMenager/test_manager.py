@@ -475,14 +475,14 @@ class TestManager:
         return all_results
     
     def test_observation_length_impact(self, base_params, n_observations_list=None,
-                                     models_to_test=None, save=False):
+                                     models_to_test=None, k=5, save=False):
         
         if n_observations_list is None:
-            n_observations_list = [100, 250, 500, 750, 1000, 1500, 2000, 
-                                  2500, 3000, 3500, 5000, 7500, 10000,15000,20000
+            n_observations_list = [250, 750, 1000, 2000, 
+                                  2500, 3500, 5000, 7500, 10000,15000,20000
                                   ]
         
-        print(f"\n🎯 BADANIE WPŁYWU LICZBY OBSERWACJI")
+        print(f"\n🎯 BADANIE WPŁYWU LICZBY OBSERWACJI (k={k})")
         print(f"{ '='*60}")
         
         all_results = []
@@ -496,26 +496,33 @@ class TestManager:
         self.cached_data = cached
         
         for i, n_obs in enumerate(n_observations_list):
-            print(f"\n{'='*50}")
-            print(f"▶ TEST {i+1}/{len(n_observations_list)} - {n_obs} obserwacji")
-            print(f"{ '='*50}")
+            obs_results = []
+            for j in range(k):
+                print(f"\n{'='*50}")
+                print(f"▶ TEST {i*k+j+1}/{len(n_observations_list)*k} - {n_obs} obserwacji (próba {j+1}/{k})")
+                print(f"{ '='*50}")
+                
+                test_params = base_params.copy()
+                test_params['n_observations'] = n_obs
+                
+                result = self.test(test_params, i*k+j+1, len(n_observations_list)*k, 
+                                 models_to_test, save=False)
+                
+                if result['success']:
+                    result['n_observations'] = n_obs
+                    result['k_run'] = j
+                    obs_results.append(result)
             
-            test_params = base_params.copy()
-            test_params['n_observations'] = n_obs
-            
-            result = self.test(test_params, i+1, len(n_observations_list), 
-                             models_to_test, save=False)
-            
-            if result['success']:
-                result['n_observations'] = n_obs
-                all_results.append(result)
+            if obs_results:
+                all_results.extend(obs_results)
         
-        self._save_observation_length_results(all_results)
+        if save:
+            self._save_observation_length_results(all_results)
         
         self._plot_observation_length_results(all_results)
         
         return all_results
-    
+
     def _save_observation_length_results(self, results):
         """Saves the results of the observation length impact study."""
         if not results:
@@ -526,7 +533,10 @@ class TestManager:
             if not result['success']:
                 continue
             
-            row = {'n_observations': result.get('n_observations', 0)}
+            row = {
+                'n_observations': result.get('n_observations', 0),
+                'k_run': result.get('k_run', 0)
+            }
             
             for model_name, metrics in result.get('metrics', {}).items():
                 for metric_name, value in metrics.items():
@@ -554,7 +564,8 @@ class TestManager:
                 continue
             
             n_obs = result.get('n_observations', 0)
-            row = {'n_observations': n_obs}
+            k_run = result.get('k_run', 0)
+            row = {'n_observations': n_obs, 'k_run': k_run}
             
             if 'metrics' in result:
                 for model_name, metrics_dict in result['metrics'].items():
@@ -568,8 +579,10 @@ class TestManager:
             return
 
         df = pd.DataFrame(data)
-        df = df.sort_values('n_observations')
+        df = df.sort_values(['n_observations', 'k_run'])
 
+        # --- Plot 1: Mean values ---
+        mean_df = df.groupby('n_observations').mean().reset_index()
         fig, axes = plt.subplots(2, 2, figsize=(15, 12))
         fig.suptitle('Wpływ liczby obserwacji na jakość predykcji', 
                      fontsize=16, fontweight='bold')
@@ -580,12 +593,12 @@ class TestManager:
         
         ax = axes[0, 0]
         mse_plotted = False
-        for col_name in df.columns:
+        for col_name in mean_df.columns:
             if col_name.endswith('_mse'):
                 model_key = col_name.replace('_mse', '')
                 model_base = model_key.rsplit('_', 1)[0]
-                if model_base in model_colors and not df[col_name].isna().all():
-                    ax.plot(df['n_observations'], df[col_name], 
+                if model_base in model_colors and not mean_df[col_name].isna().all():
+                    ax.plot(mean_df['n_observations'], mean_df[col_name], 
                             color=model_colors[model_base], marker='o', 
                             label=model_key.capitalize(), linewidth=2)
                     mse_plotted = True
@@ -602,12 +615,12 @@ class TestManager:
             ax.text(0.5, 0.5, 'Brak danych MSE', ha='center', va='center', transform=ax.transAxes)
 
         ax = axes[0, 1]
-        bayesian_col = next((c for c in df.columns if c.startswith('bayesian') and c.endswith('_mse')), None)
-        dirichlet_col = next((c for c in df.columns if c.startswith('dirichlet') and c.endswith('_mse')), None)
+        bayesian_col = next((c for c in mean_df.columns if c.startswith('bayesian') and c.endswith('_mse')), None)
+        dirichlet_col = next((c for c in mean_df.columns if c.startswith('dirichlet') and c.endswith('_mse')), None)
 
-        if bayesian_col and dirichlet_col and not df[bayesian_col].isna().all() and not df[dirichlet_col].isna().all():
-            mse_diff = df[bayesian_col] - df[dirichlet_col]
-            ax.plot(df['n_observations'], mse_diff, 'g-', marker='^', linewidth=2)
+        if bayesian_col and dirichlet_col and not mean_df[bayesian_col].isna().all() and not mean_df[dirichlet_col].isna().all():
+            mse_diff = mean_df[bayesian_col] - mean_df[dirichlet_col]
+            ax.plot(mean_df['n_observations'], mse_diff, 'g-', marker='^', linewidth=2)
             ax.axhline(y=0, color='k', linestyle='--', alpha=0.5)
             ax.set_xlabel('Liczba obserwacji')
             ax.set_ylabel('Różnica MSE')
@@ -619,12 +632,12 @@ class TestManager:
 
         ax = axes[1, 0]
         mae_plotted = False
-        for col_name in df.columns:
+        for col_name in mean_df.columns:
             if col_name.endswith('_mae'):
                 model_key = col_name.replace('_mae', '')
                 model_base = model_key.rsplit('_', 1)[0]
-                if model_base in model_colors and not df[col_name].isna().all():
-                    ax.plot(df['n_observations'], df[col_name], 
+                if model_base in model_colors and not mean_df[col_name].isna().all():
+                    ax.plot(mean_df['n_observations'], mean_df[col_name], 
                             color=model_colors[model_base], marker='s', 
                             label=model_key.capitalize(), linewidth=2)
                     mae_plotted = True
@@ -642,12 +655,12 @@ class TestManager:
 
         ax = axes[1, 1]
         corr_plotted = False
-        for col_name in df.columns:
+        for col_name in mean_df.columns:
             if col_name.endswith('_correlation'):
                 model_key = col_name.replace('_correlation', '')
                 model_base = model_key.rsplit('_', 1)[0]
-                if model_base in model_colors and not df[col_name].isna().all():
-                    ax.plot(df['n_observations'], df[col_name], 
+                if model_base in model_colors and not mean_df[col_name].isna().all():
+                    ax.plot(mean_df['n_observations'], mean_df[col_name], 
                             color=model_colors[model_base], marker='x', 
                             label=model_key.capitalize(), linewidth=2)
                     corr_plotted = True
@@ -669,3 +682,48 @@ class TestManager:
         plt.savefig(plot_file, dpi=150, bbox_inches='tight')
         plt.show()
         print(f"\n  ✔ Wykresy zapisane do: {plot_file}")
+        
+        # --- Plot 2: Boxplots ---
+        long_df_data = []
+        for result in results:
+            if not result.get('success'):
+                continue
+            
+            n_obs = result.get('n_observations', 0)
+            k_run = result.get('k_run', 0)
+            
+            if 'metrics' in result:
+                for model_name, metrics_dict in result['metrics'].items():
+                    for metric_name, value in metrics_dict.items():
+                        if isinstance(value, (int, float, np.number)):
+                            long_df_data.append({
+                                'n_observations': n_obs,
+                                'k_run': k_run,
+                                'model': model_name,
+                                'model_base': model_name.rsplit('_', 1)[0], # Extract base model name
+                                'metric': metric_name,
+                                'value': float(value)
+                            })
+        
+        if not long_df_data:
+            return
+            
+        long_df = pd.DataFrame(long_df_data)
+        
+        import seaborn as sns
+        for metric in long_df['metric'].unique():
+            plt.figure(figsize=(12, 8))
+            sns.boxplot(x='n_observations', y='value', hue='model_base', data=long_df[long_df['metric'] == metric], palette=model_colors)
+            plt.xlabel('Liczba obserwacji')
+            plt.ylabel(metric.upper())
+            plt.title(f'Rozkład {metric.upper()} vs liczba obserwacji')
+            plt.legend(title='Model')
+            plt.grid(True, alpha=0.3)
+            # plt.xscale('log')
+            plt.yscale('log')
+            plt.tight_layout()
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            plot_file_box = f"observation_length_impact_boxplot_{metric}_{timestamp}.png"
+            plt.savefig(plot_file_box, dpi=150, bbox_inches='tight')
+            plt.show()
+            print(f"\n  ✔ Wykresy boxplot dla {metric} zapisane do: {plot_file_box}")
