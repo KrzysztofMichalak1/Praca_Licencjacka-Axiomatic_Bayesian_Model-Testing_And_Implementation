@@ -55,7 +55,7 @@ class TestManager:
         return self.cached_data
     
     def test(self, test_params, test_number=1, total_tests=1, 
-             models_to_test=None, save=False):
+             models_to_test=None, save=False,visualise=False):
         """
         Main testing function.
         """
@@ -275,7 +275,7 @@ class TestManager:
             
             self._print_test_summary(metrics, comparison_stats, duration)
             
-            if test_number == 1:
+            if visualise:
                 for model_name, pred in predictions.items():
                     stworz_mape_porownawcza(gdf, true_probs, pred, 
                                           f"{model_name.capitalize()} Model")
@@ -458,7 +458,7 @@ class TestManager:
                     else:
                         test_params[param_name] = values[-1]
             
-            result = self.test(test_params, i+1, n_tests, models_to_test, save)
+            result = self.test(test_params, i+1, n_tests, models_to_test, save,i==0)
             all_results.append(result)
             
             if i < n_tests - 1:

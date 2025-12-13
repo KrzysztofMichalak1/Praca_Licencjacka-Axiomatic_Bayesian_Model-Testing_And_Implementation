@@ -56,7 +56,7 @@ def get_configuration():
            #      'mcmc_seed': 42
            #  }),
             ('logistic_normal_mcmc', {
-                'lengthscale': 750,
+                'lengthscale': 1750,
                 'variance': 1.0,
                 'distance_unit': "km",
                 'mcmc_samples': 5000,
