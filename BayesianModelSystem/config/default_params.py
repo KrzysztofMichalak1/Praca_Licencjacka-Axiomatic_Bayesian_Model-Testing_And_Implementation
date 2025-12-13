@@ -56,6 +56,15 @@ def get_configuration():
                 'mcmc_scale': 0.05,
                 'mcmc_seed': 42
             }),
+            ('logistic_normal_mcmc', {
+                'lengthscale': 5000,
+                'variance': 1.0,
+                'distance_unit': "km",
+                'mcmc_samples': 5000,
+                'mcmc_burn': 3000,
+                'mcmc_scale': 0.05,
+                'mcmc_seed': 42
+            }),
             ('dirichlet', {}),
             ('spatial', {'smoothing_factor': 0.1})
         ],

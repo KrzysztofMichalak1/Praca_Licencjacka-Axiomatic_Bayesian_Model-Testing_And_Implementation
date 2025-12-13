@@ -12,19 +12,13 @@ from ..Wczytywanie_danych.loaders import losuj_obserwacje
 from ..Wyniki.results_db import ResultsDatabase
 
 from ..Modele import (
-
     BayesianFieldModel, 
-
     BayesianFieldModelAdaptiveSearchBinary,
-
     BayesianFieldModelCVGridSearch,
-
+    LogisticNormalMCMC,
     DirichletModel, 
-
     BayesianGaussianProcess, 
-
     BayesianSpatialSmoothing
-
 )
 
 from ..Pomocnicze.metrics import oblicz_metryki
@@ -169,6 +163,24 @@ class TestManager:
                             'cv_mcmc_burn': model_params.get('cv_mcmc_burn', 500)
                         }
                         model = BayesianFieldModelCVGridSearch(**constructor_params)
+                        model.przygotuj_apriori()
+                        model.przygotuj_predykcyjny(
+                            num_samples=model_params.get('mcmc_samples', 5000),
+                            burn_in=model_params.get('mcmc_burn', 3000),
+                            proposal_scale=model_params.get('mcmc_scale', 0.05),
+                            seed=model_params.get('mcmc_seed', 42) + test_number
+                        )
+                        pred = model.posterior_mean()
+                    elif model_name == 'logistic_normal_mcmc':
+                        print(f"\n--- MODEL: {model_display_name.upper()} ---")
+                        constructor_params = {
+                            'space_points': points, 'metric_func': haversine, 'observed_indices': obs_idx,
+                            'lengthscale': model_params.get('lengthscale', 1000.0),
+                            'variance': model_params.get('variance', 1.0),
+                            'distance_unit': model_params.get('distance_unit', 'km'),
+                            'mu_prior': model_params.get('mu_prior', 0.0)
+                        }
+                        model = LogisticNormalMCMC(**constructor_params)
                         model.przygotuj_apriori()
                         model.przygotuj_predykcyjny(
                             num_samples=model_params.get('mcmc_samples', 5000),
@@ -563,7 +575,8 @@ class TestManager:
                      fontsize=16, fontweight='bold')
         
         model_colors = {'bayesian': 'b', 'dirichlet': 'r', 
-                       'gaussian': 'g', 'spatial': 'm', 'bayesian_gridsearch': 'c', 'bayesian_adaptive_search_binary': 'y'}
+                       'gaussian': 'g', 'spatial': 'm', 'bayesian_gridsearch': 'c',
+                        'bayesian_adaptive_search_binary': 'y', 'logistic_normal_mcmc': 'purple'}
         
         ax = axes[0, 0]
         mse_plotted = False
