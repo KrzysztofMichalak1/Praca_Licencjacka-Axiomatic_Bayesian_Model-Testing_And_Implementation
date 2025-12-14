@@ -44,12 +44,12 @@ jobs:
             # When there are test suites
             if report._tag == "testsuites":
                 for suite in report:
-                    passed += suite.passed
+                    passed += suite.tests - suite.failures - suite.skipped
                     failed += suite.failures
                     skipped += suite.skipped
             # When there is only one test suite
             elif report._tag == "testsuite":
-                passed = report.passed
+                passed = report.tests - report.failures - report.skipped
                 failed = report.failures
                 skipped = report.skipped
 
