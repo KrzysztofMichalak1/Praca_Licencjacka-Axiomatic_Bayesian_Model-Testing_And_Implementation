@@ -20,15 +20,67 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
-        # pytest is already in requirements.txt
+        pip install junitparser requests
     
     - name: Run pytest
       run: |
         pytest --junitxml=pytest-report.xml || true
 
-    - name: Generate test summary badge
-      uses: SgtPooki/junit-report-badge-action@v1.0.0
-      with:
-        report_path: pytest-report.xml
-        badge_path: badge.svg
-        github_token: ${{ secrets.GITHUB_TOKEN }}
+    - name: Generate badge
+      id: badge
+      run: |
+        from junitparser import JUnitXml, TestCase, TestSuite
+
+        try:
+            report = JUnitXml.fromfile('pytest-report.xml')
+        except:
+            report = None
+
+        passed = 0
+        failed = 0
+        skipped = 0
+
+        if report:
+            # When there are test suites
+            if report._tag == "testsuites":
+                for suite in report:
+                    passed += suite.passed
+                    failed += suite.failures
+                    skipped += suite.skipped
+            # When there is only one test suite
+            elif report._tag == "testsuite":
+                passed = report.passed
+                failed = report.failures
+                skipped = report.skipped
+
+        total = passed + failed + skipped
+        
+        if failed > 0:
+            color = 'red'
+        else:
+            color = 'brightgreen'
+            
+        message = f"passed: {passed} | failed: {failed} | skipped: {skipped}"
+        
+        import urllib.parse
+        message = urllib.parse.quote(message)
+        
+        badge_url = f"https://img.shields.io/badge/tests-{message}-{color}"
+        
+        import requests
+        response = requests.get(badge_url)
+        with open('badge.svg', 'wb') as f:
+            f.write(response.content)
+      shell: python
+
+    - name: Commit badge
+      run: |
+        git config --global user.name 'github-actions'
+        git config --global user.email 'github-actions@github.com'
+        git add badge.svg
+        if git diff --staged --quiet; then
+          echo "No changes to commit"
+        else
+          git commit -m "Update test results badge"
+          git push
+        fi
