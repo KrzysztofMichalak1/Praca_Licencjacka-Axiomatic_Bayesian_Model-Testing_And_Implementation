@@ -33,7 +33,7 @@ def filtruj_pacyfik_i_brzeg(gdf_points, cutoff_km, iqr_multiplier=1.5):
 
     print("\n▶ [FILTER] Usuwanie punktów blisko brzegu...")
     land = wczytaj_lad()
-    land_union = land.unary_union
+    land_union = land.union_all()
 
     cutoff_deg = cutoff_km / 111.0
     buffer = land_union.buffer(cutoff_deg)

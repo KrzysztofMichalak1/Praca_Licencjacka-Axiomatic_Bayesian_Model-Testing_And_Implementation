@@ -34,6 +34,8 @@ from ..Wczytywanie_danych.metric import haversine
 class TestManager:
     """Manager for running multiple tests."""
     
+    __test__ = False
+    
     def __init__(self, csv_path, db_path="wyniki_testow.csv"):
         self.csv_path = csv_path
         self.db = ResultsDatabase(db_path)

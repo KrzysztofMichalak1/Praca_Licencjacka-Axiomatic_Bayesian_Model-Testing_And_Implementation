@@ -27,7 +27,7 @@ def wczytaj_pacyfik():
     oceans = gpd.read_file(shpfilename)
     pacific = oceans[oceans["name"].str.contains("Pacific", case=False, na=False)]
     print(f"  ✔ Znaleziono {len(pacific)} poligonów Pacyfiku.")
-    return pacific, pacific.unary_union
+    return pacific, pacific.union_all()
 
 def wczytaj_lad():
     """Loads the shape of land for the map background."""
