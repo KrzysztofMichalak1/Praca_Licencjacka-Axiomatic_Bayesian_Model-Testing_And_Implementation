@@ -5,6 +5,8 @@ on: [push, pull_request]  # Uruchomi się przy każdym pushu i PR
 jobs:
   test:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     
     steps:
     - uses: actions/checkout@v4
@@ -18,8 +20,15 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
-        pip install pytest
+        # pytest is already in requirements.txt
     
     - name: Run pytest
       run: |
-        pytest
+        pytest --junitxml=pytest-report.xml || true
+
+    - name: Generate test summary badge
+      uses: ivanklee/test-summary-and-pr-badge@v1
+      with:
+        junit_report_path: pytest-report.xml
+        badge_path: badge.svg
+        commit_message: "Update test results badge"
