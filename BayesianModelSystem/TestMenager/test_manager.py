@@ -446,8 +446,13 @@ class TestManager:
                 print(f"     - {model_key.capitalize():15s}: {model_metrics.get('MAE', 'N/A'):.6f}")
         
         if comparison_stats.get('best_model'):
-            print(f"\n   NAJLEPSZY MODEL: {comparison_stats['best_model'].capitalize()} "
-                  f"(MSE={comparison_stats.get('best_mse', 'N/A'):.6f})")
+            best_mse_val = comparison_stats.get('best_mse', 'N/A')
+            if isinstance(best_mse_val, float):
+                print(f"\n   NAJLEPSZY MODEL: {comparison_stats['best_model'].capitalize()} "
+                      f"(MSE={best_mse_val:.6f})")
+            else:
+                print(f"\n   NAJLEPSZY MODEL: {comparison_stats['best_model'].capitalize()} "
+                      f"(MSE={best_mse_val})")
         
         if 'better_counts' in comparison_stats:
             print(f"\n   LICZBA PUNKTÓW Z NAJLEPSZYM WYNIKIEM:")
@@ -503,7 +508,7 @@ class TestManager:
         
         if n_observations_list is None:
             n_observations_list = [250, 750, 1000, 2000, 
-                                  2500, 3500, 5000, 7500, 10000,15000,20000
+                                  2500, 5000, 7500, 10000,15000,20000
                                   ]
         
         print(f"\n🎯 BADANIE WPŁYWU LICZBY OBSERWACJI (k={k})")
@@ -583,6 +588,7 @@ class TestManager:
             return
             
         data = []
+        model_keys = [] # Collect all unique model keys
         for result in results:
             if not result.get('success'):
                 continue
@@ -593,6 +599,9 @@ class TestManager:
             
             if 'metrics' in result:
                 for model_name, metrics_dict in result['metrics'].items():
+                    # Ensure model_name (which is actually unique_model_key like 'bayesian_0') is in model_keys
+                    if model_name not in model_keys:
+                        model_keys.append(model_name)
                     for metric_name, value in metrics_dict.items():
                         if isinstance(value, (int, float, np.number)):
                             row[f"{model_name}_{metric_name.lower()}"] = float(value)
@@ -611,20 +620,18 @@ class TestManager:
         fig.suptitle('Wpływ liczby obserwacji na jakość predykcji', 
                      fontsize=16, fontweight='bold')
         
-        model_colors = {'bayesian': 'b', 'dirichlet': 'r', 
-                       'gaussian': 'g', 'spatial': 'm', 'bayesian_gridsearch': 'c',
-                        'bayesian_adaptive_search_binary': 'y', 'logistic_normal_mcmc': 'purple',
-                        'lenk_adaptive': 'black'}
+        # Generate colors dynamically for each unique model_key
+        colors_cmap = plt.cm.get_cmap('tab10', len(model_keys))
+        model_colors_map = {model_key: colors_cmap(i) for i, model_key in enumerate(model_keys)}
         
         ax = axes[0, 0]
         mse_plotted = False
         for col_name in mean_df.columns:
             if col_name.endswith('_mse'):
-                model_key = col_name.replace('_mse', '')
-                model_base = model_key.rsplit('_', 1)[0]
-                if model_base in model_colors and not mean_df[col_name].isna().all():
+                model_key = col_name.replace('_mse', '') # This is the unique_model_key like 'bayesian_0'
+                if model_key in model_colors_map and not mean_df[col_name].isna().all():
                     ax.plot(mean_df['n_observations'], mean_df[col_name], 
-                            color=model_colors[model_base], marker='o', 
+                            color=model_colors_map[model_key], marker='o', 
                             label=model_key.capitalize(), linewidth=2)
                     mse_plotted = True
         
@@ -640,8 +647,10 @@ class TestManager:
             ax.text(0.5, 0.5, 'Brak danych MSE', ha='center', va='center', transform=ax.transAxes)
 
         ax = axes[0, 1]
-        bayesian_col = next((c for c in mean_df.columns if c.startswith('bayesian') and c.endswith('_mse')), None)
-        dirichlet_col = next((c for c in mean_df.columns if c.startswith('dirichlet') and c.endswith('_mse')), None)
+        # This plot compares bayesian vs dirichlet, assuming only one of each.
+        # This will still use the first bayesian and first dirichlet found.
+        bayesian_col = next((c for c in mean_df.columns if c.startswith('bayesian_') and c.endswith('_mse')), None)
+        dirichlet_col = next((c for c in mean_df.columns if c.startswith('dirichlet_') and c.endswith('_mse')), None)
 
         if bayesian_col and dirichlet_col and not mean_df[bayesian_col].isna().all() and not mean_df[dirichlet_col].isna().all():
             mse_diff = mean_df[bayesian_col] - mean_df[dirichlet_col]
@@ -649,7 +658,7 @@ class TestManager:
             ax.axhline(y=0, color='k', linestyle='--', alpha=0.5)
             ax.set_xlabel('Liczba obserwacji')
             ax.set_ylabel('Różnica MSE')
-            ax.set_title(f'Różnica MSE: {bayesian_col} vs {dirichlet_col}')
+            ax.set_title(f'Różnica MSE: {bayesian_col.split("_")[0].capitalize()} vs {dirichlet_col.split("_")[0].capitalize()}')
             ax.grid(True, alpha=0.3)
             ax.set_xscale('log')
         else:
@@ -660,10 +669,9 @@ class TestManager:
         for col_name in mean_df.columns:
             if col_name.endswith('_mae'):
                 model_key = col_name.replace('_mae', '')
-                model_base = model_key.rsplit('_', 1)[0]
-                if model_base in model_colors and not mean_df[col_name].isna().all():
+                if model_key in model_colors_map and not mean_df[col_name].isna().all():
                     ax.plot(mean_df['n_observations'], mean_df[col_name], 
-                            color=model_colors[model_base], marker='s', 
+                            color=model_colors_map[model_key], marker='s', 
                             label=model_key.capitalize(), linewidth=2)
                     mae_plotted = True
         
@@ -683,10 +691,9 @@ class TestManager:
         for col_name in mean_df.columns:
             if col_name.endswith('_correlation'):
                 model_key = col_name.replace('_correlation', '')
-                model_base = model_key.rsplit('_', 1)[0]
-                if model_base in model_colors and not mean_df[col_name].isna().all():
+                if model_key in model_colors_map and not mean_df[col_name].isna().all():
                     ax.plot(mean_df['n_observations'], mean_df[col_name], 
-                            color=model_colors[model_base], marker='x', 
+                            color=model_colors_map[model_key], marker='x', 
                             label=model_key.capitalize(), linewidth=2)
                     corr_plotted = True
 
@@ -724,8 +731,7 @@ class TestManager:
                             long_df_data.append({
                                 'n_observations': n_obs,
                                 'k_run': k_run,
-                                'model': model_name,
-                                'model_base': model_name.rsplit('_', 1)[0], # Extract base model name
+                                'model': model_name, # Use unique_model_key directly
                                 'metric': metric_name,
                                 'value': float(value)
                             })
@@ -738,7 +744,7 @@ class TestManager:
         import seaborn as sns
         for metric in long_df['metric'].unique():
             plt.figure(figsize=(12, 8))
-            sns.boxplot(x='n_observations', y='value', hue='model_base', data=long_df[long_df['metric'] == metric], palette=model_colors)
+            sns.boxplot(x='n_observations', y='value', hue='model', data=long_df[long_df['metric'] == metric], palette=model_colors_map)
             plt.xlabel('Liczba obserwacji')
             plt.ylabel(metric.upper())
             plt.title(f'Rozkład {metric.upper()} vs liczba obserwacji')
@@ -752,3 +758,163 @@ class TestManager:
             plt.savefig(plot_file_box, dpi=150, bbox_inches='tight')
             plt.show()
             print(f"\n  ✔ Wykresy boxplot dla {metric} zapisane do: {plot_file_box}")
+
+    def test_lengthscale_impact(self, base_params, lengthscale_list=None,
+                                 models_to_test=None, k=5, save=False):
+        
+        if lengthscale_list is None:
+            lengthscale_list = [100, 500, 1000, 1500, 2000, 3000, 5000]
+        
+        print(f"\n🎯 BADANIE WPŁYWU WARTOŚCI LENGTHSCALE (k={k})")
+        print(f"{ '='*60}")
+        
+        all_results = []
+        
+        for i, ls in enumerate(lengthscale_list):
+            ls_results = []
+            for j in range(k):
+                print(f"\n{'='*50}")
+                print(f"▶ TEST {i*k+j+1}/{len(lengthscale_list)*k} - lengthscale={ls} (próba {j+1}/{k})")
+                print(f"{ '='*50}")
+                
+                test_params = base_params.copy()
+                
+                # Update lengthscale for the relevant models
+                current_models_to_test = []
+                for model_name, model_params in models_to_test:
+                    if model_name in ['bayesian', 'logistic_normal_mcmc']:
+                        new_params = model_params.copy()
+                        new_params['lengthscale'] = ls
+                        current_models_to_test.append((model_name, new_params))
+                    else:
+                        current_models_to_test.append((model_name, model_params))
+
+                result = self.test(test_params, i*k+j+1, len(lengthscale_list)*k, 
+                                 current_models_to_test, save=False)
+                
+                if result['success']:
+                    result['lengthscale'] = ls
+                    result['k_run'] = j
+                    ls_results.append(result)
+            
+            if ls_results:
+                all_results.extend(ls_results)
+        
+        if save:
+            self._save_lengthscale_results(all_results)
+        
+        self._plot_lengthscale_results(all_results)
+        
+        return all_results
+
+    def _save_lengthscale_results(self, results):
+        """Saves the results of the lengthscale impact study."""
+        if not results:
+            return
+        
+        data = []
+        for result in results:
+            if not result['success']:
+                continue
+            
+            row = {
+                'lengthscale': result.get('lengthscale', 0),
+                'k_run': result.get('k_run', 0)
+            }
+            
+            for model_name, metrics in result.get('metrics', {}).items():
+                for metric_name, value in metrics.items():
+                    if isinstance(value, (int, float)):
+                        row[f"{model_name}_{metric_name.lower()}"] = float(value)
+            
+            data.append(row)
+        
+        if data:
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            output_file = f"lengthscale_impact_{timestamp}.csv"
+            
+            df = pd.DataFrame(data)
+            df.to_csv(output_file, index=False)
+            print(f"\n💾 Wyniki badania wpływu lengthscale zapisane do: {output_file}")
+    
+    def _plot_lengthscale_results(self, results):
+        """Plots the results of the lengthscale impact study."""
+        if not results:
+            return
+            
+        data = []
+        model_keys = []
+        for result in results:
+            if not result.get('success'):
+                continue
+            
+            ls = result.get('lengthscale', 0)
+            k_run = result.get('k_run', 0)
+            row = {'lengthscale': ls, 'k_run': k_run}
+            
+            if 'metrics' in result:
+                for model_name, metrics_dict in result['metrics'].items():
+                    if model_name not in model_keys:
+                        model_keys.append(model_name)
+                    for metric_name, value in metrics_dict.items():
+                        if isinstance(value, (int, float, np.number)):
+                            row[f"{model_name}_{metric_name.lower()}"] = float(value)
+            data.append(row)
+
+        if not data:
+            print("⚠️ Brak danych do wykreślenia")
+            return
+
+        df = pd.DataFrame(data)
+        df = df.sort_values(['lengthscale', 'k_run'])
+
+        mean_df = df.groupby('lengthscale').mean().reset_index()
+        fig, axes = plt.subplots(1, 2, figsize=(15, 6))
+        fig.suptitle('Wpływ Lengthscale na jakość predykcji', 
+                     fontsize=16, fontweight='bold')
+        
+        # Generate a color for each unique model key
+        colors = plt.cm.get_cmap('tab10', len(model_keys))
+        model_colors = {model_key: colors(i) for i, model_key in enumerate(model_keys)}
+        
+        ax = axes[0]
+        for col_name in mean_df.columns:
+            if col_name.endswith('_mse'):
+                model_key = col_name.replace('_mse', '')
+                if model_key in model_colors and not mean_df[col_name].isna().all():
+                    ax.plot(mean_df['lengthscale'], mean_df[col_name], 
+                            color=model_colors[model_key], marker='o', 
+                            label=model_key.capitalize(), linewidth=2)
+        
+        ax.set_xlabel('Lengthscale')
+        ax.set_ylabel('MSE')
+        ax.set_title('MSE vs Lengthscale')
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+        ax.set_yscale('log')
+        ax.set_xscale('log')
+
+        ax = axes[1]
+        for col_name in mean_df.columns:
+            if col_name.endswith('_mae'):
+                model_key = col_name.replace('_mae', '')
+                if model_key in model_colors and not mean_df[col_name].isna().all():
+                    ax.plot(mean_df['lengthscale'], mean_df[col_name], 
+                            color=model_colors[model_key], marker='s', 
+                            label=model_key.capitalize(), linewidth=2)
+
+        ax.set_xlabel('Lengthscale')
+        ax.set_ylabel('MAE')
+        ax.set_title('MAE vs Lengthscale')
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+        ax.set_yscale('log')
+        ax.set_xscale('log')
+
+        plt.tight_layout(rect=[0, 0, 1, 0.96])
+        
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        plot_file = f"lengthscale_impact_{timestamp}.png"
+        plt.savefig(plot_file, dpi=150, bbox_inches='tight')
+        plt.show()
+        print(f"\n  ✔ Wykresy zapisane do: {plot_file}")

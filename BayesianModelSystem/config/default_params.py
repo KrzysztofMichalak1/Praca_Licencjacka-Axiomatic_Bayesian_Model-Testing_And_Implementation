@@ -7,7 +7,7 @@ def get_configuration():
         'base_params': {
             'cutoff_km': 1000,
             'co_ktory': 200,
-            'n_observations': 2000,
+            'n_observations': 5000,
             'n_points': 0
         },
         'models_to_test': [
@@ -47,28 +47,30 @@ def get_configuration():
             #('spatial', {'smoothing_factor': 0.1})
         ],
         'impact_models_to_test': [
-            ('lenk_adaptive', {
-                 'variance': 1.0,
-                 'distance_unit': "km",
-                 'start_ls': 8000,
-                 'step_size': 8000,
-                 'k_steps': 6,
-                 'num_samples_search': 300,
-                 'burn_in_search': 150,
-                 'proposal_scale_search': 0.05,
-                 'mcmc_samples': 5000,
-                 'mcmc_burn': 3000,
-                 'mcmc_scale': 0.05,
-                 'mcmc_seed': 42
-             }),
-            # ('bayesian', {
-            #     'lengthscale': 5000,
-            #     'variance': 1.0,
-            #     'distance_unit': "km",
-            #     'mcmc_samples': 5000,
-            #     'mcmc_burn': 3000,
-            #     'mcmc_scale': 0.05,
-            # }),
+            # ('lenk_adaptive', {
+            #      'variance': 1.0,
+            #      'distance_unit': "km",
+            #      'start_ls': 8000,
+            #      'step_size': 8000,
+            #      'k_steps': 6,
+            #      'num_samples_search': 300,
+            #      'burn_in_search': 150,
+            #      'proposal_scale_search': 0.05,
+            #      'mcmc_samples': 5000,
+            #      'mcmc_burn': 3000,
+            #      'mcmc_scale': 0.05,
+            #      'mcmc_seed': 42
+            #  }),
+            
+            ('bayesian', {
+                'lengthscale': 11000,
+                'variance': 1.0,
+                'distance_unit': "km",
+                'mcmc_samples': 4000,
+                'mcmc_burn': 3000,
+                'mcmc_scale': 0.05,
+            }),
+
            # ('bayesian_adaptive_search_binary', {
            #      'variance': 1.0,
            #      'distance_unit': "km",
@@ -84,17 +86,20 @@ def get_configuration():
            #      'mcmc_seed': 42
            #  }),
             ('logistic_normal_mcmc', {
-                'lengthscale': 1750,
+                'lengthscale': 1150,
                 'variance': 1.0,
                 'distance_unit': "km",
                 'mcmc_samples': 5000,
                 'mcmc_burn': 3000,
                 'mcmc_scale': 0.05,
             }),
-            #('dirichlet', {}),
-            #('spatial', {'smoothing_factor': 0.1})
+            ('dirichlet', {}),
+            ('spatial', {'smoothing_factor': 0.1})
         ],
         'n_tests': 2,
         'save_results': False,
-        'run_options': {"rt":False, "it": True}
+        'run_options': {"rt":False, "it": True, "lt": False},
+        'lengthscale_list': [800,900, 1000,1100,1200,1300,1400,1500, 2000 
+            #8000,10000,11000,12000,13000,15000,20000,#30000,50000
+            ]
     }
