@@ -27,8 +27,8 @@ jobs:
         pytest --junitxml=pytest-report.xml || true
 
     - name: Generate test summary badge
-      uses: ivanklee/test-summary-and-pr-badge@v1
+      uses: SgtPooki/junit-report-badge-action@v1.0.0
       with:
-        junit_report_path: pytest-report.xml
+        report_path: pytest-report.xml
         badge_path: badge.svg
-        commit_message: "Update test results badge"
+        github_token: ${{ secrets.GITHUB_TOKEN }}
