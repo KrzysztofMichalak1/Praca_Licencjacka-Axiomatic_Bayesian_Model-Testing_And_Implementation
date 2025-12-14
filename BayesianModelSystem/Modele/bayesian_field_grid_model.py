@@ -2,6 +2,38 @@ import numpy as np
 from .bayesian_field_model import BayesianFieldModel
 
 class BayesianFieldModelCVGridSearch(BayesianFieldModel):
+    """
+    Rozszerzenie modelu `BayesianFieldModel`, które automatycznie wyszukuje
+    optymalną wartość hiperparametru `lengthscale` za pomocą przeszukiwania
+    siatki (grid search) z walidacją krzyżową (cross-validation).
+
+    Algorytm działania:
+    1. Inicjalizacja:
+       - Podobna do `BayesianFieldModel`, ale zamiast pojedynczego `lengthscale`
+         przyjmuje siatkę wartości do przetestowania (`lengthscale_grid`) oraz
+         liczbę fałd do walidacji krzyżowej (`cv_k`).
+
+    2. Grid Search z Walidacją Krzyżową (`przygotuj_apriori`):
+       - Cel: Znalezienie `lengthscale` z siatki, które najlepiej generalizuje
+         do niewidzianych danych.
+       - Model iteruje po wszystkich wartościach `lengthscale` z podanej siatki.
+       - Dla każdej wartości `lengthscale`:
+         a) Zbiór obserwowanych danych jest dzielony na `cv_k` rozłącznych części (fałd).
+         b) Uruchamiana jest pętla walidacji krzyżowej: `cv_k` razy model jest
+            trenowany na `cv_k - 1` częściach danych i walidowany na pozostałej.
+         c) Jako miara błędu używana jest uśredniona log-wiarygodność na zbiorach
+            walidacyjnych.
+       - Wybierana jest wartość `lengthscale`, która dała najlepszy (najwyższy)
+         średni wynik log-wiarygodności w procesie CV.
+
+    3. Finalna pętla MCMC (`przygotuj_predykcyjny`):
+       - Używając znalezionego optymalnego `lengthscale`, model uruchamia
+         pełną, długą symulację MCMC, dokładnie tak jak w bazowym `BayesianFieldModel`.
+
+    4. Obliczenie predykcji (`posterior_mean`):
+       - Wyniki z finalnej pętli MCMC są uśredniane do uzyskania ostatecznej
+         predykcji, analogicznie do `BayesianFieldModel`.
+    """
     def __init__(self, space_points, metric_func, observed_indices,
                  variance, distance_unit='km', lengthscale_grid=None, 
                  cv_k=5, cv_mcmc_samples=1000, cv_mcmc_burn=500):

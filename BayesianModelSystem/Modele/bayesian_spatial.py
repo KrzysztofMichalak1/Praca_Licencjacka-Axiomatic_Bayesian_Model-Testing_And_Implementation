@@ -82,8 +82,42 @@ class BayesianSpatialModel:
 
 class GaussianSpatialModelConjugate(BayesianSpatialModel):
     """
-    Gaussowski model przestrzenny z priorami sprzezonymi.
+    Gaussowski model przestrzenny z priorami sprzezonymi, implementujący Proces Gaussowski (GP).
     Dla danych ciaglych.
+
+    Algorytm działania:
+    1. Inicjalizacja:
+       - Model przyjmuje współrzędne punktów, obserwowane indeksy oraz wartości w tych punktach (`counts`).
+       - Obliczana jest pełna macierz odległości `D` między wszystkimi punktami.
+
+    2. Metoda `fit`:
+       - Cel: Estymacja parametrów `posterior` dla średniej (`mu`) i wariancji (`sigma^2`)
+         latentnego pola Gaussowskiego.
+       - Kroki:
+         a) Optymalizacja `phi` (lengthscale): Jeśli włączone, model szuka `phi`, które
+            najlepiej opisuje korelację przestrzenną, maksymalizując profilowaną wiarygodność.
+         b) Obliczenie macierzy kowariancji: Na podstawie `phi` i odległości między
+            obserwowanymi punktami tworzona jest macierz kowariancji (wag) `W_obs`.
+         c) Transformacja danych: Obserwowane dane `y_obs` są transformowane z użyciem
+            rozkładu Cholesky'ego macierzy `W_obs`, co "wybiela" dane, usuwając korelacje.
+         d) Wyznaczenie parametrów `posterior`: Na podstawie transformowanych danych i
+            zdefiniowanych priorów (Normal dla średniej, Inverse-Gamma dla wariancji),
+            model oblicza analitycznie parametry rozkładów `posterior`.
+
+    3. Metoda `predict`:
+       - Cel: Predykcja wartości pola Gaussowskiego na całej siatce.
+       - Kroki:
+         a) Próbkowanie z `posterior`: Generowane są próbki `mu` i `sigma^2` z ich
+            rozkładów `posterior` obliczonych w metodzie `fit`.
+         b) Predykcja dla nieobserwowanych punktów:
+            - Dla każdej próbki `(mu, sigma^2)`, obliczana jest średnia warunkowa i
+              kowariancja warunkowa dla nieobserwowanych punktów, bazując na
+              obserwowanych danych i strukturze korelacji (standardowa predykcja GP).
+            - Generowane są próbki z wynikowego wielowymiarowego rozkładu normalnego.
+         c) Predykcja dla obserwowanych punktów: Wartości są po prostu kopiowane z
+            danych wejściowych (`y_obs`).
+         d) Agregacja wyników: Predykcje ze wszystkich próbek są uśredniane, aby
+            uzyskać finalną wartość oczekiwaną i przedziały ufności.
     """
     
     def __init__(self, space_points, metric_func, observed_indices, 
@@ -349,8 +383,41 @@ class GaussianSpatialModelConjugate(BayesianSpatialModel):
 
 class SpatialPoissonConjugate(BayesianSpatialModel):
     """
-    Przestrzenny model Poissona z priorami Gamma sprzezonymi.
-    Dla danych liczbowych (counts).
+    Przestrzenny model Poissona z priorami Gamma (sprzężonymi), uwzględniający
+    wygładzanie przestrzenne. Model ten jest przeznaczony dla danych w postaci zliczeń.
+
+    Algorytm działania:
+    1. Inicjalizacja:
+       - Model przyjmuje współrzędne punktów, obserwowane indeksy, zliczenia (`counts`)
+         oraz opcjonalnie wektor ekspozycji (`N`).
+       - Przechowuje parametry prioru Gamma (`alpha_prior`, `beta_prior`).
+
+    2. Metoda `fit`:
+       - Cel: Estymacja parametrów `posterior` rozkładu Gamma dla intensywności (`lambda`)
+         w każdym z obserwowanych punktów.
+       - Kroki:
+         a) Optymalizacja `phi`: Jeśli włączone, model szuka optymalnego `phi` (lengthscale),
+            które maksymalizuje log-wiarygodność Poissona.
+         b) Obliczenie wag: Tworzona jest macierz wag przestrzennych `W_obs` dla
+            obserwowanych punktów na podstawie `phi`.
+         c) Obliczenie parametrów `posterior` (Gamma): Dla każdego obserwowanego punktu `i`,
+            parametry `alpha_n` i `beta_n` rozkładu `posterior` są obliczane przez połączenie:
+            - Priora (Gamma(`alpha_prior`, `beta_prior`)).
+            - Danych z punktu `i` (zliczenia `y_counts[i]` i ekspozycja `y_exposure[i]`).
+            - Informacji z sąsiedztwa: tworzone są "pseudo-obserwacje" na podstawie
+              ważonej przestrzennie średniej intensywności z sąsiednich punktów.
+
+    3. Metoda `predict`:
+       - Cel: Predykcja intensywności `lambda` na całej siatce.
+       - Kroki:
+         a) Próbkowanie z `posterior`: Dla każdego obserwowanego punktu generowane są
+            próbki intensywności `lambda` z jego rozkładu `posterior` Gamma.
+         b) Interpolacja przestrzenna: Dla każdego punktu `j` na całej siatce (obserwowanego
+            i nieobserwowanego), wartość `lambda` jest estymowana jako średnia ważona
+            próbek `lambda` z obserwowanych lokalizacji. Wagi zależą od odległości
+            przestrzennej do punktu `j`.
+         c) Agregacja wyników: Predykcje ze wszystkich próbek są uśredniane, aby
+            uzyskać finalną oczekiwaną intensywność `lambda` i przedziały ufności.
     """
     
     def __init__(self, space_points, metric_func, observed_indices,
@@ -571,7 +638,40 @@ class SpatialPoissonConjugate(BayesianSpatialModel):
 
 class SpatialBinomialConjugate(BayesianSpatialModel):
     """
-    Przestrzenny model dwumianowy z priorami Beta sprzezonymi.
+    Przestrzenny model dwumianowy z priorami Beta (sprzężonymi), który uwzględnia
+    wygładzanie przestrzenne. Model jest przeznaczony dla danych o liczbie sukcesów i prób.
+
+    Algorytm działania:
+    1. Inicjalizacja:
+       - Model przyjmuje współrzędne punktów, obserwowane indeksy, liczbę sukcesów (`counts`)
+         oraz liczbę prób (`N`).
+       - Przechowuje parametry prioru Beta (`alpha_prior`, `beta_prior`).
+
+    2. Metoda `fit`:
+       - Cel: Estymacja parametrów `posterior` rozkładu Beta dla prawdopodobieństwa
+         sukcesu (`p`) w każdym z obserwowanych punktów.
+       - Kroki:
+         a) Optymalizacja `phi`: Jeśli włączone, model szuka optymalnego `phi` (lengthscale),
+            które maksymalizuje log-wiarygodność dwumianową.
+         b) Obliczenie wag: Tworzona jest macierz wag przestrzennych `W_obs` dla
+            obserwowanych punktów na podstawie `phi`.
+         c) Obliczenie parametrów `posterior` (Beta): Dla każdego obserwowanego punktu `i`,
+            parametry `alpha_n` i `beta_n` rozkładu `posterior` są obliczane przez połączenie:
+            - Priora (Beta(`alpha_prior`, `beta_prior`)).
+            - Danych z punktu `i` (liczba sukcesów i porażek).
+            - Informacji z sąsiedztwa: tworzone są "pseudo-obserwacje" na podstawie
+              ważonego przestrzennie prawdopodobieństwa sukcesu z sąsiednich punktów.
+
+    3. Metoda `predict`:
+       - Cel: Predykcja prawdopodobieństwa sukcesu `p` na całej siatce.
+       - Kroki:
+         a) Próbkowanie z `posterior`: Dla każdego obserwowanego punktu generowane są
+            próbki prawdopodobieństwa `p` z jego rozkładu `posterior` Beta.
+         b) Interpolacja przestrzenna: Dla każdego punktu `j` na całej siatce, wartość `p`
+            jest estymowana jako średnia ważona próbek `p` z obserwowanych lokalizacji.
+            Wagi zależą od odległości przestrzennej do punktu `j`.
+         c) Agregacja wyników: Predykcje ze wszystkich próbek są uśredniane, aby
+            uzyskać finalne oczekiwane prawdopodobieństwo `p` i przedziały ufności.
     """
     
     def __init__(self, space_points, metric_func, observed_indices,

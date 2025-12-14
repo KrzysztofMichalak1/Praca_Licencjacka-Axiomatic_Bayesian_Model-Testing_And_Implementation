@@ -7,6 +7,40 @@ from scipy.linalg import solve_triangular
 from .Lenks_model import LogisticNormalMCMC, log_posterior_logistic_normal_fast
 
 class LenkAdaptiveSearchModel(LogisticNormalMCMC):
+    """
+    Rozszerzenie modelu `LogisticNormalMCMC`, które automatycznie wyszukuje
+    optymalną wartość hiperparametru `lengthscale` (długość skali). Model
+    wykorzystuje algorytm adaptacyjny oparty na metodzie Lenka do maksymalizacji
+    wiarygodności brzegowej (marginal likelihood).
+
+    Algorytm działania:
+    1. Inicjalizacja:
+       - Podobna do `LogisticNormalMCMC`, ale dodatkowo przyjmuje parametry
+         sterujące procesem wyszukiwania (`start_ls`, `step_size`, `k_steps`).
+
+    2. Adaptacyjne wyszukiwanie `lengthscale` (`przygotuj_apriori`):
+       - Cel: Znalezienie `lengthscale`, które maksymalizuje wiarygodność brzegową.
+       - Model przeprowadza iteracyjne wyszukiwanie w przestrzeni `lengthscale`.
+       - W każdej iteracji:
+         a) Testowana jest nowa wartość `lengthscale`.
+         b) Uruchamiana jest krótka symulacja MCMC do estymacji wiarygodności
+            brzegowej dla tej wartości `lengthscale`, używając metody Chib's method
+            lub podobnej.
+         c) Na podstawie oszacowanej wiarygodności, model decyduje, w którym
+            kierunku dalej przeszukiwać przestrzeń `lengthscale` (np. idąc w
+            kierunku gradientu).
+       - Po `k_steps` krokach, wybierany jest `lengthscale` z najwyższą
+         zanotowaną wiarygodnością brzegową.
+
+    3. Finalna pętla MCMC (`przygotuj_predykcyjny`):
+       - Używając znalezionego optymalnego `lengthscale`, model uruchamia
+         pełną, długą symulację MCMC do precyzyjnego próbkowania `p(Z | dane)`,
+         dokładnie tak jak w bazowym modelu `LogisticNormalMCMC`.
+
+    4. Obliczenie predykcji (`posterior_mean`):
+       - Wyniki z finalnej pętli MCMC są uśredniane do uzyskania ostatecznej
+         predykcji, analogicznie do `LogisticNormalMCMC`.
+    """
     def __init__(self, space_points, metric_func, observed_indices,
                  variance=1.0, distance_unit='km', mu_prior=0.0,
                  start_ls=3000, step_size=2000, k_steps=3,

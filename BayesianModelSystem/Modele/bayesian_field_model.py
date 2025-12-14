@@ -2,6 +2,42 @@ import numpy as np
 from .bayesian_helpers import MultivariateNormalCholesky, log_posterior_fast, x_from_w
 
 class BayesianFieldModel:
+    """
+    Główny model implementujący Bayesowskie pole losowe z wykorzystaniem Procesu
+    Gaussowskiego (GP) do modelowania przestrzennego. Prawdopodobieństwa w poszczególnych
+    lokalizacjach są wynikiem transformacji latentnego (ukrytego) pola `w` za pomocą
+    funkcji probit.
+
+    Algorytm działania:
+    1. Inicjalizacja (`__init__` i `przygotuj_apriori`):
+       - Model przyjmuje geometrię, obserwowane indeksy i hiperparametry dla GP
+         (długość skali `lengthscale`, wariancja `variance`).
+       - Na podstawie `lengthscale` i odległości między punktami obliczana jest
+         macierz kowariancji `Sigma` dla latentnego pola Gaussowskiego `w`.
+         Zakładamy, że `w` ma rozkład a priori `N(0, Sigma)`.
+
+    2. Główna pętla MCMC (`przygotuj_predykcyjny`):
+       - Cel: Próbkowanie z rozkładu a posteriori `p(w | dane)`.
+       - Używany jest algorytm Metropolis-Hastings do generowania łańcucha próbek `w`.
+       - W każdej iteracji:
+         a) Proponowany jest nowy stan `w_proposal` poprzez dodanie szumu do `w_current`.
+         b) Obliczana jest wiarygodność (likelihood) `p(dane | w_proposal)`.
+            Wiarygodność bazuje na modelu Bernoulli'ego, gdzie p-stwo sukcesu `p`
+            jest wynikiem transformacji `w` funkcją probit (`p = Phi(w)`).
+            Wiarygodność jest niezerowa tylko dla obserwowanych punktów.
+         c) Obliczany jest stosunek gęstości `posterior` (acceptance ratio), łączący
+            wiarygodność i gęstość `prior` dla `w`.
+         d) Nowy stan `w_proposal` jest akceptowany z prawdopodobieństwem równym
+            temu stosunkowi.
+       - Pierwsze `burn_in` próbek jest odrzucanych, a reszta tworzy empiryczną
+         reprezentację rozkładu `posterior`.
+
+    3. Obliczenie predykcji (`posterior_mean`):
+       - Zebrane próbki `w` są transformowane do próbek prawdopodobieństw `p`
+         poprzez zastosowanie funkcji probit do każdej próbki.
+       - Finalna predykcja jest średnią arytmetyczną tych próbek `p` dla każdego
+         punktu siatki.
+    """
     def __init__(self, space_points, metric_func, observed_indices,
                  lengthscale, variance, distance_unit='km'):
         print("\n▶ [MODEL] Inicjalizacja modelu...")

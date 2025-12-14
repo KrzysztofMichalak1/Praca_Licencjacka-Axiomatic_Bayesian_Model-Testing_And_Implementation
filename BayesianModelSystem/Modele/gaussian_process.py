@@ -4,7 +4,33 @@ import scipy.linalg as la
 from ..Wczytywanie_danych.metric import haversine
 
 class BayesianGaussianProcess:
-    """Bayesian Gaussian Process model for comparison."""
+    """
+    W pełni Bayesowska implementacja Procesu Gaussowskiego (GP), która marginalizuje
+    pole latentne `w`, aby próbować z rozkładu `posterior` dla hiperparametrów.
+
+    Algorytm działania:
+    1. Inicjalizacja:
+       - Model przyjmuje geometrię, obserwowane indeksy oraz priory dla
+         hiperparametrów `lengthscale` i `variance` (np. rozkłady Log-Normal i Inv-Gamma).
+       - Oblicza wektor `y` jako znormalizowane zliczenia obserwacji.
+
+    2. Próbkowanie `posterior` dla hiperparametrów (MCMC):
+       - Cel: Próbkowanie z rozkładu `p(lengthscale, variance | dane)`.
+       - Wiarygodność `p(dane | lengthscale, variance)` jest obliczana analitycznie
+         poprzez marginalizację (całkowanie) po latentnym polu `w`. Jest to
+         standardowa wiarygodność brzegowa dla modelu GP.
+       - Używany jest algorytm Metropolis-Hastings do próbkowania z `posterior`,
+         które jest proporcjonalne do `prior * wiarygodność brzegowa`.
+       - W każdej iteracji MCMC proponowane są nowe wartości `lengthscale` i `variance`,
+         a następnie akceptowane lub odrzucane na podstawie stosunku gęstości.
+
+    3. Predykcja `posterior` (`posterior_predictive`):
+       - Po zebraniu próbek hiperparametrów, obliczane są ich średnie wartości `posterior`.
+       - Używając **średnich wartości `lengthscale` i `variance`**, obliczana jest
+         finalna predykcja dla całego pola. Jest to standardowa predykcja GP
+         dla ustalonych hiperparametrów (tzw. "plug-in approximation").
+       - Wynik jest normalizowany do rozkładu prawdopodobieństwa.
+    """
     
     def __init__(self, space_points, observed_indices, 
                  lengthscale_prior=(1000, 500), variance_prior=(2, 1)):

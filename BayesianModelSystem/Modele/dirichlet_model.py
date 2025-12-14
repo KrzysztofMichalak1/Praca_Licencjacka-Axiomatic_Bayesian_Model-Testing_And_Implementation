@@ -3,7 +3,28 @@ import numpy as np
 from scipy.stats import dirichlet
 
 class DirichletModel:
-    """Simple Dirichlet model as a baseline."""
+    """
+    Model bazujący na rozkładzie Dirichleta, który jest sprzężonym priorem
+    dla rozkładu wielomianowego (Multinomial). Jest to prosty model bazowy, który nie
+    uwzględnia korelacji przestrzennych w sposób jawny.
+
+    Algorytm działania:
+    1. Inicjalizacja:
+       - Model przyjmuje listę indeksów wszystkich dokonanych obserwacji (`obs_idx`)
+         oraz całkowitą liczbę lokalizacji (`n_points`).
+       - Zliczane są obserwacje w każdej lokalizacji, tworząc wektor zliczeń `counts`.
+       - Ustawiany jest parametr `alpha` dla prioru Dirichleta. W tym przypadku,
+         `alpha = counts + 1`, co jest równoznaczne z zastosowaniem priora
+         o wartości `alpha=1` (wygładzanie Laplace'a), a następnie obliczeniem
+         parametru `posterior`.
+
+    2. Predykcja (Średnia `posterior`):
+       - Metoda `posterior_mean` oblicza wartość oczekiwaną rozkładu `posterior`.
+       - Dla rozkładu Dirichleta, jest to wektor `p` o elementach:
+         `p_i = alpha_i / sum(alpha)`.
+       - Wynikowy wektor `p` reprezentuje oczekiwane prawdopodobieństwo dla każdej
+         lokalizacji i jest zwracany jako finalna predykcja modelu.
+    """
     
     def __init__(self, observed_indices, n_points):
         print("▶ [DIRICHLET] Inicjalizacja modelu Dirichleta...")

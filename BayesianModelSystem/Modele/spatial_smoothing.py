@@ -3,7 +3,29 @@ import numpy as np
 from ..Wczytywanie_danych.metric import haversine
 
 class BayesianSpatialSmoothing:
-    """Simple Bayesian spatial smoothing model."""
+    """
+    Prosty, nieparametryczny model wygładzania przestrzennego, działający na
+    zasadzie wygładzania jądrowego (kernel smoothing). Nie jest to model w pełni
+    Bayesowski w sensie estymacji `posterior`, ale raczej heurystyka oparta na
+    dystansie.
+
+    Algorytm działania:
+    1. Inicjalizacja:
+       - Model przyjmuje geometrię punktów, obserwowane indeksy (`obs_idx`) oraz
+         współczynnik wygładzania (`smoothing_factor`), który pełni rolę
+         podobną do `lengthscale`.
+       - Zlicza obserwacje i oblicza empiryczne prawdopodobieństwa (`counts / total_obs`).
+
+    2. Obliczenie Predykcji (`posterior_mean`):
+       - Obliczana jest macierz wag (kernel) na podstawie odległości między
+         wszystkimi punktami i współczynnika `smoothing_factor`. Waga między
+         dwoma punktami jest tym większa, im są one bliżej siebie (np. `exp(-d/phi)`).
+       - Predykcja dla każdego punktu na siatce jest obliczana jako iloczyn
+         macierzowy macierzy wag i wektora empirycznych prawdopodobieństw. W efekcie,
+         prawdopodobieństwo w każdym punkcie jest "rozmywane" na jego otoczenie.
+       - Wynikowy wektor jest normalizowany tak, aby suma prawdopodobieństw
+         wynosiła 1, tworząc ostateczny rozkład prawdopodobieństwa.
+    """
     
     def __init__(self, space_points, observed_indices, smoothing_factor=0.1):
         self.space_points = np.array(space_points)

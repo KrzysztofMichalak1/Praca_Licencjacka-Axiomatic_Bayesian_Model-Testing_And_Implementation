@@ -40,8 +40,36 @@ def log_posterior_logistic_normal_fast(Z, counts, N, K_inv, log_prior_norm_const
 
 class LogisticNormalMCMC:
     """
-    Logistic-Normal model for spatial point process data, implemented
-    with an interface consistent with other models in this module.
+    Model logistyczno-normalny dla danych w postaci przestrzennego procesu punktowego.
+    Jest to wariant modelu z polem Gaussowskim, gdzie do transformacji latentnego
+    pola `Z` na prawdopodobieństwa `p` używana jest funkcja softmax.
+
+    Algorytm działania:
+    1. Inicjalizacja (`__init__` i `przygotuj_apriori`):
+       - Model przyjmuje geometrię, obserwowane indeksy i hiperparametry dla GP
+         (długość skali `lengthscale`, wariancja `variance`).
+       - Zliczane są obserwacje w każdej lokalizacji (`counts`).
+       - Obliczana jest macierz kowariancji `K` dla latentnego pola `Z` oraz jej
+         odwrotność `K_inv` i stała normalizacyjna dla priora.
+         Zakładamy, że `Z` ma rozkład a priori `N(mu_prior, K)`.
+
+    2. Główna pętla MCMC (`przygotuj_predykcyjny`):
+       - Cel: Próbkowanie z rozkładu a posteriori `p(Z | counts)`.
+       - Używany jest algorytm Metropolis-Hastings.
+       - W każdej iteracji:
+         a) Proponowany jest nowy stan `Z_proposal`.
+         b) Obliczana jest gęstość log-posterior `log p(Z_proposal | counts)`, która jest
+            sumą gęstości log-prior `log p(Z_proposal)` i log-wiarygodności
+            `log p(counts | Z_proposal)`. Wiarygodność bazuje na rozkładzie
+            wielomianowym (Multinomial), gdzie p-stwa `p` są wynikiem
+            transformacji `Z` funkcją softmax.
+         c) Nowy stan `Z_proposal` jest akceptowany na podstawie stosunku gęstości.
+       - Po fazie burn-in, próbki `Z` są zapisywane.
+
+    3. Obliczenie predykcji (`posterior_mean`):
+       - Każda zapisana próbka `Z` jest transformowana do próbki prawdopodobieństw `p`
+         za pomocą funkcji softmax.
+       - Finalna predykcja jest średnią arytmetyczną tych próbek `p`.
     """
     def __init__(self, space_points, metric_func, observed_indices,
                  lengthscale=50.0, variance=1.0, distance_unit='km',

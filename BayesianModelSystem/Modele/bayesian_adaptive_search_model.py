@@ -4,6 +4,28 @@ from .bayesian_field_model import BayesianFieldModel
 from .bayesian_helpers import log_posterior_fast
 
 class BayesianFieldModelAdaptiveSearchBinary(BayesianFieldModel):
+    """
+    Rozszerzenie modelu `BayesianFieldModel`, które automatycznie wyszukuje
+    optymalną wartość hiperparametru `lengthscale` za pomocą wyszukiwania binarnego.
+
+    Algorytm działania jest bardzo podobny do `LenkAdaptiveSearchModel`, ale różni
+    się strategią wyszukiwania:
+
+    2. Adaptacyjne wyszukiwanie `lengthscale` (`przygotuj_apriori`):
+       - Cel: Znalezienie `lengthscale`, które maksymalizuje wiarygodność brzegową.
+       - Model przeprowadza wyszukiwanie binarne w zadanym zakresie `lengthscale`.
+       - W każdej iteracji:
+         a) Sprawdzany jest środkowy punkt aktualnego przedziału `lengthscale`.
+         b) Uruchamiana jest krótka symulacja MCMC do estymacji wiarygodności
+            brzegowej w tym punkcie.
+         c) Porównuje się wiarygodność w punkcie środkowym z wiarygodnościami na
+            krańcach przedziału, aby zdecydować, którą połowę przedziału odrzucić.
+       - Proces jest powtarzany, zawężając przedział poszukiwań, aż do znalezienia
+         optymalnej wartości `lengthscale`.
+
+    Pozostałe kroki (Inicjalizacja, Finalna pętla MCMC, Obliczenie predykcji) są
+    analogiczne do `LenkAdaptiveSearchModel` i bazowego `BayesianFieldModel`.
+    """
     def __init__(self, space_points, metric_func, observed_indices,
                  variance, distance_unit='km',
                  start_ls=3000, step_size=2000, k_steps=3,

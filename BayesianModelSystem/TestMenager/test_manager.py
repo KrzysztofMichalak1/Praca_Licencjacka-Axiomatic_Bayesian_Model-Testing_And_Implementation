@@ -117,6 +117,9 @@ class TestManager:
                 try:
                     if model_name == 'bayesian':
                         print(f"\n--- MODEL: {model_display_name.upper()} ---")
+                        # === KROK 1: Inicjalizacja Modelu ===
+                        # Model pola Gaussowskiego z funkcją linku probit. Tworzy macierz kowariancji `Sigma`
+                        # na podstawie `lengthscale` i odległości między punktami.
                         constructor_params = {
                             'space_points': points, 'metric_func': haversine, 'observed_indices': obs_idx,
                             'lengthscale': model_params.get('lengthscale', 500),
@@ -125,16 +128,23 @@ class TestManager:
                         }
                         model = BayesianFieldModel(**constructor_params)
                         model.przygotuj_apriori()
+                        
+                        # === KROK 2: Przygotowanie Predykcji (Sampling MCMC) ===
+                        # Używa algorytmu Metropolis-Hastings do próbkowania z `posterior` dla latentnego pola `w`.
                         model.przygotuj_predykcyjny(
                             num_samples=model_params.get('mcmc_samples', 5000),
                             burn_in=model_params.get('mcmc_burn', 3000),
                             proposal_scale=model_params.get('mcmc_scale', 0.05),
                             seed=model_params.get('mcmc_seed', 42) + test_number
                         )
+                        
+                        # === KROK 3: Obliczenie Predykcji (Średnia Posterior) ===
+                        # Transformuje próbki `w` na `p` (p-stwo) i oblicza ich średnią.
                         pred = model.posterior_mean()
 
                     elif model_name == 'bayesian_adaptive_search_binary':
                         print(f"\n--- MODEL: {model_display_name.upper()} ---")
+                        # === KROK 1: Inicjalizacja Modelu ===
                         constructor_params = {
                             'space_points': points, 'metric_func': haversine, 'observed_indices': obs_idx,
                             'variance': model_params.get('variance', 1.0),
@@ -147,16 +157,25 @@ class TestManager:
                             'proposal_scale_search': model_params.get("proposal_scale_search", 0.05)
                         }
                         model = BayesianFieldModelAdaptiveSearchBinary(**constructor_params)
+                        
+                        # === KROK 2: Adaptacyjne Wyszukiwanie `lengthscale` (Binarne) ===
+                        # Model używa wyszukiwania binarnego do znalezienia optymalnego `lengthscale`.
                         model.przygotuj_apriori() # This will run the binary adaptive search
+                        
+                        # === KROK 3: Finalny Sampling MCMC ===
+                        # Z użyciem znalezionego `lengthscale`, uruchamiana jest pełna symulacja MCMC.
                         model.przygotuj_predykcyjny(
                             num_samples=model_params.get('mcmc_samples', 5000),
                             burn_in=model_params.get('mcmc_burn', 3000),
                             proposal_scale=model_params.get('mcmc_scale', 0.05),
                             seed=model_params.get('mcmc_seed', 42) + test_number
                         )
+                        
+                        # === KROK 4: Obliczenie Predykcji ===
                         pred = model.posterior_mean()
                     elif model_name == 'lenk_adaptive':
                         print(f"\n--- MODEL: {model_display_name.upper()} ---")
+                        # === KROK 1: Inicjalizacja Modelu ===
                         constructor_params = {
                             'space_points': points, 'metric_func': haversine, 'observed_indices': obs_idx,
                             'variance': model_params.get('variance', 1.0),
@@ -170,16 +189,26 @@ class TestManager:
                             'proposal_scale_search': model_params.get("proposal_scale_search", 0.05)
                         }
                         model = LenkAdaptiveSearchModel(**constructor_params)
+                        
+                        # === KROK 2: Adaptacyjne Wyszukiwanie `lengthscale` ===
+                        # Model iteracyjnie szuka optymalnego `lengthscale` poprzez estymację
+                        # wiarygodności brzegowej dla różnych wartości.
                         model.przygotuj_apriori() # This will run the adaptive search
+                        
+                        # === KROK 3: Finalny Sampling MCMC ===
+                        # Z użyciem znalezionego `lengthscale`, uruchamiana jest pełna symulacja MCMC.
                         model.przygotuj_predykcyjny(
                             num_samples=model_params.get('mcmc_samples', 5000),
                             burn_in=model_params.get('mcmc_burn', 3000),
                             proposal_scale=model_params.get('mcmc_scale', 0.05),
                             seed=model_params.get('mcmc_seed', 42) + test_number
                         )
+                        
+                        # === KROK 4: Obliczenie Predykcji ===
                         pred = model.posterior_mean()
                     elif model_name == 'bayesian_cv_gridsearch':
                         print(f"\n--- MODEL: {model_display_name.upper()} ---")
+                        # === KROK 1: Inicjalizacja Modelu ===
                         constructor_params = {
                             'space_points': points, 'metric_func': haversine, 'observed_indices': obs_idx,
                             'variance': model_params.get('variance', 1.0),
@@ -190,16 +219,28 @@ class TestManager:
                             'cv_mcmc_burn': model_params.get('cv_mcmc_burn', 500)
                         }
                         model = BayesianFieldModelCVGridSearch(**constructor_params)
+                        
+                        # === KROK 2: Grid Search z Walidacją Krzyżową ===
+                        # Model testuje każdą wartość `lengthscale` z siatki, używając k-krotnej 
+                        # walidacji krzyżowej do oceny błędu i wyboru najlepszej wartości.
                         model.przygotuj_apriori()
+                        
+                        # === KROK 3: Finalny Sampling MCMC ===
+                        # Z użyciem znalezionego `lengthscale`, uruchamiana jest pełna symulacja MCMC.
                         model.przygotuj_predykcyjny(
                             num_samples=model_params.get('mcmc_samples', 5000),
                             burn_in=model_params.get('mcmc_burn', 3000),
                             proposal_scale=model_params.get('mcmc_scale', 0.05),
                             seed=model_params.get('mcmc_seed', 42) + test_number
                         )
+                        
+                        # === KROK 4: Obliczenie Predykcji ===
                         pred = model.posterior_mean()
                     elif model_name == 'logistic_normal_mcmc':
                         print(f"\n--- MODEL: {model_display_name.upper()} ---")
+                        # === KROK 1: Inicjalizacja Modelu ===
+                        # Model pola Gaussowskiego z funkcją linku logit (odmiana modelu `bayesian`).
+                        # Tworzy macierz kowariancji `Sigma` na podstawie `lengthscale`.
                         constructor_params = {
                             'space_points': points, 'metric_func': haversine, 'observed_indices': obs_idx,
                             'lengthscale': model_params.get('lengthscale', 1000.0),
@@ -209,81 +250,115 @@ class TestManager:
                         }
                         model = LogisticNormalMCMC(**constructor_params)
                         model.przygotuj_apriori()
+                        
+                        # === KROK 2: Przygotowanie Predykcji (Sampling MCMC) ===
+                        # Używa algorytmu Metropolis-Hastings do próbkowania z `posterior` dla latentnego pola `w`.
                         model.przygotuj_predykcyjny(
                             num_samples=model_params.get('mcmc_samples', 5000),
                             burn_in=model_params.get('mcmc_burn', 3000),
                             proposal_scale=model_params.get('mcmc_scale', 0.05),
                             seed=model_params.get('mcmc_seed', 42) + test_number
                         )
+                        
+                        # === KROK 3: Obliczenie Predykcji (Średnia Posterior) ===
+                        # Transformuje próbki `w` na `p` (p-stwo) za pomocą funkcji logistycznej i oblicza ich średnią.
                         pred = model.posterior_mean()
                     elif model_name == 'dirichlet':
                         print(f"\n--- MODEL: {model_display_name.upper()} ---")
+                        # === KROK 1 i 2: Przygotowanie Danych i Obliczenia ===
+                        # Model Dirichlet zlicza obserwacje (`obs_idx`) i oblicza parametry `posterior`.
+                        # Prior `alpha=1` (jednostajny), posterior `alpha_n = alpha + zliczenia`.
                         model = DirichletModel(obs_idx, len(gdf))
+                        
+                        # === KROK 3: Predykcja (Średnia Posterior) ===
+                        # Oblicza średnią rozkładu posterior, która jest oczekiwanym prawdopodobieństwem.
                         pred = model.posterior_mean()
 
                     elif model_name == 'gaussian':
                         print(f"\n--- MODEL: {model_display_name.upper()} ---")
+                        # === KROK 1: Inicjalizacja Modelu ===
+                        # W pełni Bayesowski Proces Gaussowski.
                         gp_constructor_params = {
                             'space_points': points, 'observed_indices': obs_idx,
                             'lengthscale_prior': model_params.get('lengthscale_prior', (1000, 500)),
                             'variance_prior': model_params.get('variance_prior', (2, 1))
                         }
                         model = BayesianGaussianProcess(**gp_constructor_params)
+                        
+                        # === KROK 2: Próbkowanie Posterior (MCMC) ===
+                        # Używa MCMC do próbkowania z połączonego rozkładu posterior dla pola latentnego `w`
+                        # ORAZ hiperparametrów (`lengthscale`, `variance`).
                         model.sample_posterior(
                             n_samples=model_params.get('n_samples', 1000),
                             burn_in=model_params.get('burn_in', 500),
                             step_size=model_params.get('step_size', 0.1)
                         )
+                        
+                        # === KROK 3: Predykcja Posterior ===
+                        # Uśrednia predykcje po wszystkich próbkach z MCMC, uwzględniając niepewność hiperparametrów.
                         pred = model.posterior_predictive()
 
                     elif model_name == 'spatial':
                         print(f"\n--- MODEL: {model_display_name.upper()} ---")
+                        # === KROK 1: Inicjalizacja Modelu ===
+                        # Prosty model wygładzania przestrzennego (kernel smoothing).
                         model = BayesianSpatialSmoothing(
                             points, obs_idx, smoothing_factor=model_params.get('smoothing_factor', 0.1)
                         )
+                        
+                        # === KROK 2: Obliczenie Predykcji ===
+                        # Tworzy binarny wektor obserwacji (1 tam, gdzie była obs., 0 gdzie nie).
+                        # Następnie "rozmywa" ten wektor za pomocą jądra (kernela) przestrzennego,
+                        # tworząc ważoną sumę, która jest normalizowana do rozkładu p-stwa.
                         pred = model.posterior_mean()
                     elif model_name == 'spatial_binomial':
                         print(f"\n--- MODEL: {model_display_name.upper()} ---")
                         
-                        # Agregacja obserwacji do zliczeń dla każdej lokalizacji
+                        # === KROK 1: Przygotowanie Danych Obserwacyjnych ===
+                        # Zlicz obserwacje (`obs_idx`) jako liczbę sukcesów (`counts`) w każdej lokalizacji.
                         counts = np.bincount(obs_idx, minlength=len(points))
-                        # W tym modelu 'N' reprezentuje liczbę prób w każdej lokalizacji,
-                        # co nie jest wprost dostępne; używamy n_observations jako placeholder,
-                        # ale model powinien to interpretować poprawnie.
-                        N = np.full(len(points), test_params['n_observations']) # Poprawione N
-                        
-                        # Użyj tylko tych indeksów, gdzie były obserwacje
+                        # Ustal liczbę prób (`N`) jako stałą dla wszystkich lokalizacji.
+                        N = np.full(len(points), test_params['n_observations'])
+                        # Model będzie działał tylko na punktach, gdzie były obserwacje.
                         actual_obs_indices = np.where(counts > 0)[0]
                         
+                        # === KROK 2: Inicjalizacja i Trening Modelu ===
                         constructor_params = {
                             'space_points': points, 'metric_func': haversine, 'observed_indices': actual_obs_indices,
-                            'counts': counts, # Przekaż wszystkie zliczenia
-                            'N': N, # Przekaż wszystkie próby
+                            'counts': counts, 'N': N,
                             'alpha_prior': model_params.get('alpha_prior', 0.5),
                             'beta_prior': model_params.get('beta_prior', 0.5),
                             'smoothing_strength': model_params.get('smoothing_strength', 0.1)
                         }
                         model = SpatialBinomialConjugate(**constructor_params)
+                        # Metoda fit estymuje parametry `posterior` rozkładu Beta dla każdego punktu,
+                        # z uwzględnieniem wygładzania przestrzennego i optymalizacją `phi`.
                         model.fit(phi=model_params.get('phi'), optimize_phi=model_params.get('optimize_phi', True))
+                        
+                        # === KROK 3: Predykcja na Całej Siatce ===
+                        # Generuje próbki `p` z rozkładu posterior dla obserwowanych punktów,
+                        # a następnie interpoluje je na całą siatkę przez ważenie przestrzenne.
                         pred, _ = model.predict(num_samples=model_params.get('num_samples', 1000))
 
                     elif model_name == 'spatial_gaussian':
                         print(f"\n--- MODEL: {model_display_name.upper()} ---")
                         
-                        # Oblicz zliczenia obserwacji dla każdej lokalizacji
+                        # === KROK 1: Przygotowanie Danych Obserwacyjnych ===
+                        # Zlicz wystąpienia każdego obserwowanego indeksu, aby uzyskać liczbę obserwacji w każdej lokalizacji.
                         observed_counts = np.bincount(obs_idx, minlength=len(points))
                         
-                        # Oblicz empiryczne prawdopodobieństwo na podstawie zliczeń
+                        # Oblicz empiryczne prawdopodobieństwo dla każdej lokalizacji. To jest wektor 'y' dla modelu.
                         total_observations = len(obs_idx)
                         if total_observations > 0:
                             empirical_probs = observed_counts / total_observations
                         else:
                             empirical_probs = np.zeros(len(points))
                         
-                        # Użyj tylko tych indeksów, gdzie były obserwacje
+                        # Wyodrębnij unikalne indeksy, w których dokonano obserwacji, oraz odpowiadające im wartości.
                         unique_indices = np.where(observed_counts > 0)[0]
                         observed_values = empirical_probs[unique_indices]
 
+                        # === KROK 2: Inicjalizacja i Trening Modelu ===
                         constructor_params = {
                             'space_points': points, 'metric_func': haversine, 'observed_indices': unique_indices,
                             'counts': observed_values, # dla modelu Gaussa, 'counts' to wartości y
@@ -291,33 +366,43 @@ class TestManager:
                             'sigma_prior': model_params.get('sigma_prior', np.std(observed_values) if len(observed_values) > 0 else 1),
                         }
                         model = GaussianSpatialModelConjugate(**constructor_params)
+                        # Metoda fit optymalizuje phi, oblicza wagi i parametry posterior
                         model.fit(phi=model_params.get('phi'), optimize_phi=model_params.get('optimize_phi', True))
+                        
+                        # === KROK 3: Predykcja na Całej Siatce ===
+                        # Metoda predict generuje predykcje dla wszystkich punktów siatki
                         pred, _ = model.predict(num_samples=model_params.get('num_samples', 1000))
                     
                     elif model_name == 'spatial_poisson':
                         print(f"\n--- MODEL: {model_display_name.upper()} ---")
                         
-                        # Agregacja obserwacji do zliczeń
+                        # === KROK 1: Przygotowanie Danych Obserwacyjnych ===
+                        # Zlicz obserwacje (`obs_idx`) jako liczbę zdarzeń (`counts`).
                         counts = np.bincount(obs_idx, minlength=len(points))
-                        exposure = np.ones(len(points)) # Załóż stałą ekspozycję
-                        
-                        # Użyj tylko tych indeksów, gdzie były obserwacje
+                        # Ustal ekspozycję jako 1 dla wszystkich lokalizacji.
+                        exposure = np.ones(len(points)) 
+                        # Model będzie działał na punktach, gdzie były obserwacje.
                         actual_obs_indices = np.where(counts > 0)[0]
                         
+                        # === KROK 2: Inicjalizacja i Trening Modelu ===
                         constructor_params = {
                             'space_points': points, 'metric_func': haversine, 'observed_indices': actual_obs_indices,
-                            'counts': counts,
-                            'N': exposure, # Dla Poissona, N to ekspozycja
+                            'counts': counts, 'N': exposure, # Dla Poissona, N to ekspozycja
                             'alpha_prior': model_params.get('alpha_prior', 0.5),
                             'beta_prior': model_params.get('beta_prior', 0.5),
                             'smoothing_strength': model_params.get('smoothing_strength', 1.0),
                         }
                         model = SpatialPoissonConjugate(**constructor_params)
+                        # Metoda fit estymuje parametry `posterior` rozkładu Gamma dla `lambda`,
+                        # z uwzględnieniem wygładzania przestrzennego.
                         model.fit(phi=model_params.get('phi'), optimize_phi=model_params.get('optimize_phi', True))
-                        # Predykcja zwraca intensywność lambda
+                        
+                        # === KROK 3: Predykcja na Całej Siatce ===
+                        # Model przewiduje intensywność `lambda` przez interpolację przestrzenną.
                         pred, _ = model.predict(num_samples=model_params.get('num_samples', 1000))
                         
-                        # Normalizuj intensywności do rozkładu prawdopodobieństwa
+                        # === KROK 4: Normalizacja Predykcji ===
+                        # Przekształć przewidziane intensywności na rozkład prawdopodobieństwa.
                         if pred is not None and np.sum(pred) > 0:
                             pred = pred / np.sum(pred)
                         else:
