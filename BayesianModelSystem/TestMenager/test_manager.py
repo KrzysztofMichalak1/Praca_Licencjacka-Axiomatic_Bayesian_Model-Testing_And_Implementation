@@ -16,6 +16,7 @@ from ..Modele import (
     BayesianFieldModelAdaptiveSearchBinary,
     BayesianFieldModelCVGridSearch,
     LogisticNormalMCMC,
+    LenkAdaptiveSearchModel,
     DirichletModel, 
     BayesianGaussianProcess, 
     BayesianSpatialSmoothing
@@ -144,6 +145,29 @@ class TestManager:
                         }
                         model = BayesianFieldModelAdaptiveSearchBinary(**constructor_params)
                         model.przygotuj_apriori() # This will run the binary adaptive search
+                        model.przygotuj_predykcyjny(
+                            num_samples=model_params.get('mcmc_samples', 5000),
+                            burn_in=model_params.get('mcmc_burn', 3000),
+                            proposal_scale=model_params.get('mcmc_scale', 0.05),
+                            seed=model_params.get('mcmc_seed', 42) + test_number
+                        )
+                        pred = model.posterior_mean()
+                    elif model_name == 'lenk_adaptive':
+                        print(f"\n--- MODEL: {model_display_name.upper()} ---")
+                        constructor_params = {
+                            'space_points': points, 'metric_func': haversine, 'observed_indices': obs_idx,
+                            'variance': model_params.get('variance', 1.0),
+                            'distance_unit': model_params.get('distance_unit', 'km'),
+                            'mu_prior': model_params.get('mu_prior', 0.0),
+                            'start_ls': model_params.get('start_ls', 1000),
+                            'step_size': model_params.get('step_size', 2000),
+                            'k_steps': model_params.get('k_steps', 3),
+                            'num_samples_search': model_params.get("num_samples_search", 100),
+                            'burn_in_search': model_params.get("burn_in_search", 50),
+                            'proposal_scale_search': model_params.get("proposal_scale_search", 0.05)
+                        }
+                        model = LenkAdaptiveSearchModel(**constructor_params)
+                        model.przygotuj_apriori() # This will run the adaptive search
                         model.przygotuj_predykcyjny(
                             num_samples=model_params.get('mcmc_samples', 5000),
                             burn_in=model_params.get('mcmc_burn', 3000),
@@ -589,7 +613,8 @@ class TestManager:
         
         model_colors = {'bayesian': 'b', 'dirichlet': 'r', 
                        'gaussian': 'g', 'spatial': 'm', 'bayesian_gridsearch': 'c',
-                        'bayesian_adaptive_search_binary': 'y', 'logistic_normal_mcmc': 'purple'}
+                        'bayesian_adaptive_search_binary': 'y', 'logistic_normal_mcmc': 'purple',
+                        'lenk_adaptive': 'black'}
         
         ax = axes[0, 0]
         mse_plotted = False
