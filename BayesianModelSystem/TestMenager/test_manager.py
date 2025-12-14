@@ -19,7 +19,10 @@ from ..Modele import (
     LenkAdaptiveSearchModel,
     DirichletModel, 
     BayesianGaussianProcess, 
-    BayesianSpatialSmoothing
+    BayesianSpatialSmoothing,
+    SpatialBinomialConjugate,
+    GaussianSpatialModelConjugate,
+    SpatialPoissonConjugate
 )
 
 from ..Pomocnicze.metrics import oblicz_metryki
@@ -239,6 +242,86 @@ class TestManager:
                             points, obs_idx, smoothing_factor=model_params.get('smoothing_factor', 0.1)
                         )
                         pred = model.posterior_mean()
+                    elif model_name == 'spatial_binomial':
+                        print(f"\n--- MODEL: {model_display_name.upper()} ---")
+                        
+                        # Agregacja obserwacji do zliczeń dla każdej lokalizacji
+                        counts = np.bincount(obs_idx, minlength=len(points))
+                        # W tym modelu 'N' reprezentuje liczbę prób w każdej lokalizacji,
+                        # co nie jest wprost dostępne; używamy n_observations jako placeholder,
+                        # ale model powinien to interpretować poprawnie.
+                        N = np.full(len(points), test_params['n_observations']) # Poprawione N
+                        
+                        # Użyj tylko tych indeksów, gdzie były obserwacje
+                        actual_obs_indices = np.where(counts > 0)[0]
+                        
+                        constructor_params = {
+                            'space_points': points, 'metric_func': haversine, 'observed_indices': actual_obs_indices,
+                            'counts': counts, # Przekaż wszystkie zliczenia
+                            'N': N, # Przekaż wszystkie próby
+                            'alpha_prior': model_params.get('alpha_prior', 0.5),
+                            'beta_prior': model_params.get('beta_prior', 0.5),
+                            'smoothing_strength': model_params.get('smoothing_strength', 0.1)
+                        }
+                        model = SpatialBinomialConjugate(**constructor_params)
+                        model.fit(phi=model_params.get('phi'), optimize_phi=model_params.get('optimize_phi', True))
+                        pred, _ = model.predict(num_samples=model_params.get('num_samples', 1000))
+
+                    elif model_name == 'spatial_gaussian':
+                        print(f"\n--- MODEL: {model_display_name.upper()} ---")
+                        
+                        # Oblicz zliczenia obserwacji dla każdej lokalizacji
+                        observed_counts = np.bincount(obs_idx, minlength=len(points))
+                        
+                        # Oblicz empiryczne prawdopodobieństwo na podstawie zliczeń
+                        total_observations = len(obs_idx)
+                        if total_observations > 0:
+                            empirical_probs = observed_counts / total_observations
+                        else:
+                            empirical_probs = np.zeros(len(points))
+                        
+                        # Użyj tylko tych indeksów, gdzie były obserwacje
+                        unique_indices = np.where(observed_counts > 0)[0]
+                        observed_values = empirical_probs[unique_indices]
+
+                        constructor_params = {
+                            'space_points': points, 'metric_func': haversine, 'observed_indices': unique_indices,
+                            'counts': observed_values, # dla modelu Gaussa, 'counts' to wartości y
+                            'mu_prior': model_params.get('mu_prior', np.mean(observed_values) if len(observed_values) > 0 else 0),
+                            'sigma_prior': model_params.get('sigma_prior', np.std(observed_values) if len(observed_values) > 0 else 1),
+                        }
+                        model = GaussianSpatialModelConjugate(**constructor_params)
+                        model.fit(phi=model_params.get('phi'), optimize_phi=model_params.get('optimize_phi', True))
+                        pred, _ = model.predict(num_samples=model_params.get('num_samples', 1000))
+                    
+                    elif model_name == 'spatial_poisson':
+                        print(f"\n--- MODEL: {model_display_name.upper()} ---")
+                        
+                        # Agregacja obserwacji do zliczeń
+                        counts = np.bincount(obs_idx, minlength=len(points))
+                        exposure = np.ones(len(points)) # Załóż stałą ekspozycję
+                        
+                        # Użyj tylko tych indeksów, gdzie były obserwacje
+                        actual_obs_indices = np.where(counts > 0)[0]
+                        
+                        constructor_params = {
+                            'space_points': points, 'metric_func': haversine, 'observed_indices': actual_obs_indices,
+                            'counts': counts,
+                            'N': exposure, # Dla Poissona, N to ekspozycja
+                            'alpha_prior': model_params.get('alpha_prior', 0.5),
+                            'beta_prior': model_params.get('beta_prior', 0.5),
+                            'smoothing_strength': model_params.get('smoothing_strength', 1.0),
+                        }
+                        model = SpatialPoissonConjugate(**constructor_params)
+                        model.fit(phi=model_params.get('phi'), optimize_phi=model_params.get('optimize_phi', True))
+                        # Predykcja zwraca intensywność lambda
+                        pred, _ = model.predict(num_samples=model_params.get('num_samples', 1000))
+                        
+                        # Normalizuj intensywności do rozkładu prawdopodobieństwa
+                        if pred is not None and np.sum(pred) > 0:
+                            pred = pred / np.sum(pred)
+                        else:
+                            pred = np.ones(len(points)) / len(points)
                         
                     else:
                         print(f"⚠️ Nieznany model: {model_name}")
@@ -622,7 +705,11 @@ class TestManager:
         
         # Generate colors dynamically for each unique model_key
         colors_cmap = plt.cm.get_cmap('tab10', len(model_keys))
-        model_colors_map = {model_key: colors_cmap(i) for i, model_key in enumerate(model_keys)}
+        model_colors_map = {model_key: plt.cm.get_cmap('tab10')(i) for i, model_key in enumerate(model_keys)}
+        
+        # Add a specific color for spatial_binomial if it's not already there
+        if 'spatial_binomial_0' not in model_colors_map:
+            model_colors_map['spatial_binomial_0'] = 'cyan'
         
         ax = axes[0, 0]
         mse_plotted = False

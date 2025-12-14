@@ -7,6 +7,7 @@ from .Lenk_adaptive_search_model import LenkAdaptiveSearchModel
 from .dirichlet_model import DirichletModel
 from .gaussian_process import BayesianGaussianProcess
 from .spatial_smoothing import BayesianSpatialSmoothing
+from .bayesian_spatial import SpatialBinomialConjugate , GaussianSpatialModelConjugate, SpatialPoissonConjugate
 
 __all__ = [
     "BayesianFieldModel",
@@ -16,5 +17,6 @@ __all__ = [
     "LenkAdaptiveSearchModel",
     "DirichletModel",
     "BayesianGaussianProcess",
-    "BayesianSpatialSmoothing"
+    "BayesianSpatialSmoothing",
+    "SpatialBinomialConjugate"
 ]

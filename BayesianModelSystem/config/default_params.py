@@ -7,60 +7,79 @@ def get_configuration():
         'base_params': {
             'cutoff_km': 1000,
             'co_ktory': 200,
-            'n_observations': 5000,
+            'n_observations': 1000,
             'n_points': 0
         },
         'models_to_test': [
-             ('lenk_adaptive', {
-                'variance': 1.0,
-                'distance_unit': "km",
-                'start_ls': 800,
-                'step_size': 800,
-                'k_steps': 6,
-                'num_samples_search': 300,
-                'burn_in_search': 150,
-                'proposal_scale_search': 0.05,
-                'mcmc_samples': 5000,
-                'mcmc_burn': 3000,
-                'mcmc_scale': 0.05,
-                'mcmc_seed': 42
+             ('spatial_binomial', {
+                'alpha_prior': 0.5,
+                'beta_prior': 0.5,
+                'smoothing_strength': 1,
+                'optimize_phi': False,
+                "phi":4
              }),
-             ('logistic_normal_mcmc', {
-                'lengthscale': 1750,
-                'variance': 1.0,
-                'distance_unit': "km",
-                'mcmc_samples': 5000,
-                'mcmc_burn': 3000,
-                'mcmc_scale': 0.05,
-                'mcmc_seed': 42
-            }),
-            ('bayesian', {
-                'lengthscale': 5000,
-                'variance': 1.0,
-                'distance_unit': "km",
-                'mcmc_samples': 5000,
-                'mcmc_burn': 3000,
-                'mcmc_scale': 0.05,
-                'mcmc_seed': 42
-            }),
-            #('dirichlet', {}),
-            #('spatial', {'smoothing_factor': 0.1})
+             ('spatial_gaussian', {
+                'mu_prior': 0.0,
+                'sigma_prior': 1.0,
+                'optimize_phi': False,
+                "phi":4,
+             }),
+             ('spatial_poisson', {
+                'alpha_prior': 0.5,
+                'beta_prior': 0.5,
+                'optimize_phi':False,
+                "phi":4,
+             }),
+            #  ('lenk_adaptive', {
+            #     'variance': 1.0,
+            #     'distance_unit': "km",
+            #     'start_ls': 800,
+            #     'step_size': 800,
+            #     'k_steps': 6,
+            #     'num_samples_search': 300,
+            #     'burn_in_search': 150,
+            #     'proposal_scale_search': 0.05,
+            #     'mcmc_samples': 5000,
+            #     'mcmc_burn': 3000,
+            #     'mcmc_scale': 0.05,
+            #     'mcmc_seed': 42
+            #  }),
+            #  ('logistic_normal_mcmc', {
+            #     'lengthscale': 1250,
+            #     'variance': 1.0,
+            #     'distance_unit': "km",
+            #     'mcmc_samples': 5000,
+            #     'mcmc_burn': 3000,
+            #     'mcmc_scale': 0.05,
+            #     'mcmc_seed': 42
+            # }),
+            # ('bayesian', {
+            #     'lengthscale': 12000,
+            #     'variance': 1.0,
+            #     'distance_unit': "km",
+            #     'mcmc_samples': 5000,
+            #     'mcmc_burn': 3000,
+            #     'mcmc_scale': 0.05,
+            #     'mcmc_seed': 42
+            # }),
+            # ('dirichlet', {}),
+            # ('spatial', {'smoothing_factor': 0.1})
         ],
         'impact_models_to_test': [
-            # ('lenk_adaptive', {
-            #      'variance': 1.0,
-            #      'distance_unit': "km",
-            #      'start_ls': 8000,
-            #      'step_size': 8000,
-            #      'k_steps': 6,
-            #      'num_samples_search': 300,
-            #      'burn_in_search': 150,
-            #      'proposal_scale_search': 0.05,
-            #      'mcmc_samples': 5000,
-            #      'mcmc_burn': 3000,
-            #      'mcmc_scale': 0.05,
-            #      'mcmc_seed': 42
-            #  }),
+            ('lenk_adaptive', {
+                 'variance': 1.0,
+                 'distance_unit': "km",
+                 'start_ls': 8000,
+                 'step_size': 8000,
+                 'k_steps': 6,
+                 'num_samples_search': 300,
+                 'burn_in_search': 150,
+                 'proposal_scale_search': 0.05,
+                 'mcmc_samples': 5000,
+                 'mcmc_burn': 3000,
+                 'mcmc_scale': 0.05,
+                 'mcmc_seed': 42
+             }),
             
             ('bayesian', {
                 'lengthscale': 11000,
@@ -70,21 +89,39 @@ def get_configuration():
                 'mcmc_burn': 3000,
                 'mcmc_scale': 0.05,
             }),
-
-           # ('bayesian_adaptive_search_binary', {
-           #      'variance': 1.0,
-           #      'distance_unit': "km",
-           #      'start_ls': 8000,
-           #      'step_size': 8000,
-           #      'k_steps': 6,
-           #      'num_samples_search': 300,
-           #      'burn_in_search': 150,
-           #      'proposal_scale_search': 0.05,
-           #      'mcmc_samples': 5000,
-           #      'mcmc_burn': 3000,
-           #      'mcmc_scale': 0.05,
-           #      'mcmc_seed': 42
-           #  }),
+             ('spatial_binomial', {
+                'alpha_prior': 0.5,
+                'beta_prior': 0.5,
+                'smoothing_strength': 1,
+                'optimize_phi': False,
+                "phi":4
+             }),
+             ('spatial_gaussian', {
+                'mu_prior': 0.0,
+                'sigma_prior': 1.0,
+                'optimize_phi': False,
+                "phi":4,
+             }),
+             ('spatial_poisson', {
+                'alpha_prior': 0.5,
+                'beta_prior': 0.5,
+                'optimize_phi':False,
+                "phi":4,
+             }),
+           ('bayesian_adaptive_search_binary', {
+                'variance': 1.0,
+                'distance_unit': "km",
+                'start_ls': 8000,
+                'step_size': 8000,
+                'k_steps': 6,
+                'num_samples_search': 300,
+                'burn_in_search': 150,
+                'proposal_scale_search': 0.05,
+                'mcmc_samples': 5000,
+                'mcmc_burn': 3000,
+                'mcmc_scale': 0.05,
+                'mcmc_seed': 42
+            }),
             ('logistic_normal_mcmc', {
                 'lengthscale': 1150,
                 'variance': 1.0,
@@ -94,7 +131,17 @@ def get_configuration():
                 'mcmc_scale': 0.05,
             }),
             ('dirichlet', {}),
-            ('spatial', {'smoothing_factor': 0.1})
+            ('spatial', {'smoothing_factor': 0.1}),
+            ('spatial_gaussian', {
+                'mu_prior': 0.0,
+                'sigma_prior': 1.0,
+                'optimize_phi': True,
+            }),
+            ('spatial_poisson', {
+                'alpha_prior': 0.5,
+                'beta_prior': 0.5,
+                'optimize_phi': True,
+            }),
         ],
         'n_tests': 2,
         'save_results': False,
