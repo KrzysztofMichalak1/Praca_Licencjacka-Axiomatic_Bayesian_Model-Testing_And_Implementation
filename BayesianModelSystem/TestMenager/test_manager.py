@@ -145,19 +145,22 @@ class TestManager:
                         pred = model.posterior_mean()
 
                     elif model_name == 'bayesian_adaptive_search_binary':
-                        print(f"\n--- MODEL: {model_display_name.upper()} ---")
+                        print(f"\n--- MODEL: {model_display_name.upper()} (Analytic Moment Estimator) ---")
+    
                         # === KROK 1: Inicjalizacja Modelu ===
+                        # Zostawiamy tylko to, co faktycznie definiuje strukturę modelu.
+                        # Nowy estymator sam wyliczy 'c' na podstawie danych i geometrii.
                         constructor_params = {
-                            'space_points': points, 'metric_func': haversine, 'observed_indices': obs_idx,
+                            'p':model_params.get('p',0.8),
+                            'space_points': points, 
+                            'metric_func': haversine, 
+                            'observed_indices': obs_idx,
                             'variance': model_params.get('variance', 1.0),
-                            'distance_unit': model_params.get('distance_unit', 'km'),
-                            'start_ls': model_params.get('start_ls', 1000),
-                            'step_size': model_params.get('step_size', 2000),
-                            'k_steps': model_params.get('k_steps', 3),
-                            'num_samples_search': model_params.get("num_samples_search", 100),
-                            'burn_in_search': model_params.get("burn_in_search", 50),
-                            'proposal_scale_search': model_params.get("proposal_scale_search", 0.05)
+                            'distance_unit': model_params.get('distance_unit', 'km')
                         }
+    
+                        # Jeśli mimo wszystko chcesz przekazać stare parametry (np. do logów), 
+                        # **kwargs w __init__ je obsłuży, ale tutaj jest czyściej bez nich.
                         model = BayesianFieldModelAdaptiveSearchBinary(**constructor_params)
                         
                         # === KROK 2: Adaptacyjne Wyszukiwanie `lengthscale` (Binarne) ===
@@ -677,9 +680,9 @@ class TestManager:
                                      models_to_test=None, k=5, save=False):
         
         if n_observations_list is None:
-            n_observations_list = [250, 750, 1000, 2000, 
-                                  2500, 5000, 7500, 10000,15000,20000
-                                  ]
+            n_observations_list = [#250, 750, 1000, 2000, 
+                                  #2500, 5000, 7500, 10000,15000,20000,
+                                  35000,50000,100000]
         
         print(f"\n🎯 BADANIE WPŁYWU LICZBY OBSERWACJI (k={k})")
         print(f"{ '='*60}")

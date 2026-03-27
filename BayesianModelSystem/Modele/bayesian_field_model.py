@@ -39,13 +39,13 @@ class BayesianFieldModel:
          punktu siatki.
     """
     def __init__(self, space_points, metric_func, observed_indices,
-                 lengthscale, variance, distance_unit='km'):
+                 lengthscale, variance, distance_unit='km',p=1):
         print("\n▶ [MODEL] Inicjalizacja modelu...")
         self.space_points = list(space_points)
         self.metric = metric_func
         self.n = len(self.space_points)
         self.m = self.n - 1
-
+        self.p=p
         self.observed_indices = np.asarray(observed_indices)
         self.counts = np.bincount(self.observed_indices, minlength=self.n)
         self.N = int(self.counts.sum())
@@ -73,13 +73,13 @@ class BayesianFieldModel:
         Sigma_w = np.zeros((self.m, self.m))
         for i in range(self.m):
             pi = self.space_points[i+1]
-            d_i1 = self.metric(pi, p1, return_unit=self.distance_unit)/self.lengthscale
+            d_i1 = (self.metric(pi, p1, return_unit=self.distance_unit)/self.lengthscale)**(self.p)
             Sigma_w[i, i] = d_i1
         
             for j in range(i+1, self.m):
                 pj = self.space_points[j+1]
-                d_j1 = self.metric(pj, p1, return_unit=self.distance_unit)/self.lengthscale
-                d_ij = self.metric(pi, pj, return_unit=self.distance_unit)/self.lengthscale
+                d_j1 = (self.metric(pj, p1, return_unit=self.distance_unit)/self.lengthscale)**(self.p)
+                d_ij = (self.metric(pi, pj, return_unit=self.distance_unit)/self.lengthscale)**(self.p)
             
                 cov_ij = (d_i1 + d_j1 - d_ij) / 2.0
                 Sigma_w[i, j] = cov_ij
