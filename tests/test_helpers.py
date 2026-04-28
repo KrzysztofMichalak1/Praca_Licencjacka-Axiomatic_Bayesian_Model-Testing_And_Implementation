@@ -21,7 +21,7 @@
 import numpy as np
 import pytest
 from BayesianModelSystem.Wczytywanie_danych.metric import haversine
-from BayesianModelSystem.Modele.Lenks_model import z_to_x_softmax
+from BayesianModelSystem.Modele.model_lenka_preparamed import z_to_x_softmax
 
 def test_haversine_known_values():
     """

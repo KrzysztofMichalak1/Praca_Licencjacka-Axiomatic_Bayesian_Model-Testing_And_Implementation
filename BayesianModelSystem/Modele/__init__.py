@@ -1,22 +1,24 @@
 """Module for all models."""
-from .bayesian_field_model import BayesianFieldModel
-from .bayesian_adaptive_search_model import BayesianFieldModelAdaptiveSearchBinary
-from .bayesian_field_grid_model import BayesianFieldModelCVGridSearch
-from .Lenks_model import LogisticNormalMCMC
-from .Lenk_adaptive_search_model import LenkAdaptiveSearchModel
-from .dirichlet_model import DirichletModel
+from .model_aksjomatyczny import ModelAksjomatyczny
+from .model_aksjomatyczny_preparamed import ModelAksjomatycznyPreparamed
+from .model_lenka import ModelLenka
+from .model_lenka_preparamed import ModelLenkaPreparamed
+from .model_dirichleta import ModelDirichleta
+from .model_wygladzania_przestrzennego import ModelWygladzaniaPrzestrzennego
+from .model_gausowski_sprzezony import ModelGausowskiSprzezony
+from .model_poissona_sprzezony import ModelPoissonaSprzezony
+from .model_dwumianowy_sprzezony import ModelDwumianowySprzezony
 from .gaussian_process import BayesianGaussianProcess
-from .spatial_smoothing import BayesianSpatialSmoothing
-from .bayesian_spatial import SpatialBinomialConjugate , GaussianSpatialModelConjugate, SpatialPoissonConjugate
 
 __all__ = [
-    "BayesianFieldModel",
-    "BayesianFieldModelAdaptiveSearchBinary",
-    "BayesianFieldModelCVGridSearch",
-    "LogisticNormalMCMC",
-    "LenkAdaptiveSearchModel",
-    "DirichletModel",
-    "BayesianGaussianProcess",
-    "BayesianSpatialSmoothing",
-    "SpatialBinomialConjugate"
+    "ModelAksjomatyczny",
+    "ModelAksjomatycznyPreparamed",
+    "ModelLenka",
+    "ModelLenkaPreparamed",
+    "ModelDirichleta",
+    "ModelWygladzaniaPrzestrzennego",
+    "ModelGausowskiSprzezony",
+    "ModelPoissonaSprzezony",
+    "ModelDwumianowySprzezony",
+    "BayesianGaussianProcess"
 ]

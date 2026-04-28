@@ -18,38 +18,39 @@ def stworz_mape_porownawcza(gdf, true_probs, pred_probs, title_suffix=""):
               '#FFE4E1', '#FFB6C1', '#FF69B4', '#DC143C', '#8B0000']
     cmap = mcolors.LinearSegmentedColormap.from_list("custom_blue_red", colors, N=256)
     
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(20, 8), 
-                                  subplot_kw={'projection': ccrs.PlateCarree()})
-    
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 16),
+                                  subplot_kw={'projection': ccrs.PlateCarree()},
+                                  layout="constrained")
+
     # Mapa 1: Prawdziwy rozkład
-    sc1 = ax1.scatter(gdf["Longitude"], gdf["Latitude"], 
+    sc1 = ax1.scatter(gdf["Longitude"], gdf["Latitude"],
                      c=true_probs, cmap=cmap, s=30, alpha=0.7,
                      vmin=vmin, vmax=vmax)
     ax1.coastlines()
-    ax1.set_global()
-    ax1.set_title(f'Prawdziwy rozkład bogactwa gatunkowego\n{title_suffix}', 
-                 fontsize=14, fontweight='bold')
-    
+    # ax1.set_global() # Usunięcie set_global może pomóc w lepszym dopasowaniu
+    ax1.set_extent([-180, 180, -90, 90], crs=ccrs.PlateCarree())
+    ax1.set_title(f'Prawdziwy rozkład bogactwa gatunkowego\n{title_suffix}',
+                  fontsize=16, fontweight='bold', pad=20)
+
     # Dodaj colorbar dla pierwszej mapy
-    divider1 = make_axes_locatable(ax1)
-    cax1 = divider1.append_axes("right", size="5%", pad=0.1, axes_class=plt.Axes)
-    plt.colorbar(sc1, cax=cax1, label='Prawdopodobieństwo')
-    
+    plt.colorbar(sc1, ax=ax1, label='Prawdopodobieństwo', shrink=0.6, pad=0.02)
+
     # Mapa 2: Predykowany rozkład
-    sc2 = ax2.scatter(gdf["Longitude"], gdf["Latitude"], 
+    sc2 = ax2.scatter(gdf["Longitude"], gdf["Latitude"],
                      c=pred_probs, cmap=cmap, s=30, alpha=0.7,
                      vmin=vmin, vmax=vmax)
     ax2.coastlines()
-    ax2.set_global()
-    ax2.set_title(f'Predykowany rozkład bogactwa gatunkowego\n{title_suffix}', 
-                 fontsize=14, fontweight='bold')
-    
+    # ax2.set_global()
+    ax2.set_extent([-180, 180, -90, 90], crs=ccrs.PlateCarree())
+    ax2.set_title(f'Predykowany rozkład bogactwa gatunkowego\n{title_suffix}',
+                  fontsize=16, fontweight='bold', pad=20)
+
     # Dodaj colorbar dla drugiej mapy
-    divider2 = make_axes_locatable(ax2)
-    cax2 = divider2.append_axes("right", size="5%", pad=0.1, axes_class=plt.Axes)
-    plt.colorbar(sc2, cax=cax2, label='Prawdopodobieństwo')
-    
-    plt.tight_layout()
+    plt.colorbar(sc2, ax=ax2, label='Prawdopodobieństwo', shrink=0.6, pad=0.02)
+
+    # Zamiast tight_layout używamy constrained_layout zdefiniowanego w subplots
+    # plt.show(block=False) # Można zakomentować jeśli nie chcemy okna popup
+
     plt.savefig(f'mapa_porownawcza_{title_suffix.replace(" ", "_").lower()}.png', 
                 dpi=150, bbox_inches='tight')
     plt.show(block=False)
