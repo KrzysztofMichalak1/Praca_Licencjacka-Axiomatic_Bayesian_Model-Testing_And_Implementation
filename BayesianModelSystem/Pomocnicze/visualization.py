@@ -1,60 +1,68 @@
 "This module contains functions for data visualization."
 import matplotlib.pyplot as plt
 import cartopy.crs as ccrs
+import cartopy.feature as cfeature
 import numpy as np
 import matplotlib.colors as mcolors
-from mpl_toolkits.axes_grid1 import make_axes_locatable
+import re
 
 def stworz_mape_porownawcza(gdf, true_probs, pred_probs, title_suffix=""):
     """Creates a comparative map of true and predicted distributions."""
     print(f"▶ [MAP] Tworzenie mapy porównawczej {title_suffix}...")
     
-    # Oblicz wspólny zakres dla skal kolorów
-    vmin = min(np.min(true_probs), np.min(pred_probs))
-    vmax = max(np.max(true_probs), np.max(pred_probs))
+    # Oblicz wspólny zakres dla skal kolorów (ignorując NaN)
+    combined = np.concatenate([true_probs, pred_probs])
+    vmin = np.nanmin(combined)
+    vmax = np.nanmax(combined)
+    print(f"    - Zakres prawdopodobieństwa: [{vmin:.2e}, {vmax:.2e}]")
     
-    # Stwórz custom colormap - niebieski dla niskich wartości, czerwony dla wysokich
-    colors = ['#1E3F66', '#2E5984', '#4682B4', '#87CEEB', '#B0E0E6', 
-              '#FFE4E1', '#FFB6C1', '#FF69B4', '#DC143C', '#8B0000']
-    cmap = mcolors.LinearSegmentedColormap.from_list("custom_blue_red", colors, N=256)
+    # Tworzenie figury
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 16), dpi=300,
+                                  subplot_kw={'projection': ccrs.PlateCarree()})
+
+    plt.rcParams.update({'font.size': 12, 'axes.titlesize': 14})
+    cmap = 'viridis'
+
+    # Funkcja pomocnicza do rysowania pojedynczej mapy
+    def rysuj_mape(ax, data, title):
+        sc = ax.scatter(gdf["Longitude"], gdf["Latitude"],
+                         c=data, cmap=cmap, s=30, alpha=0.8,
+                         vmin=vmin, vmax=vmax, edgecolors='none', transform=ccrs.PlateCarree())
+        
+        # Dodawanie cech geograficznych
+        ax.add_feature(cfeature.COASTLINE, linewidth=0.5, zorder=2)
+        ax.add_feature(cfeature.BORDERS, linewidth=0.3, linestyle=':', zorder=2)
+        ax.add_feature(cfeature.LAND, facecolor='lightgray', alpha=0.2, zorder=1)
+        ax.add_feature(cfeature.OCEAN, facecolor='aliceblue', alpha=0.1, zorder=0)
+        
+        # Ustawianie zasięgu na podstawie danych
+        lon_min, lon_max = gdf["Longitude"].min(), gdf["Longitude"].max()
+        lat_min, lat_max = gdf["Latitude"].min(), gdf["Latitude"].max()
+        padding = 2.0
+        ax.set_extent([lon_min - padding, lon_max + padding, 
+                        lat_min - padding, lat_max + padding], crs=ccrs.PlateCarree())
+        
+        ax.set_title(title, fontweight='bold', pad=15)
+        
+        # Colorbar
+        cbar = plt.colorbar(sc, ax=ax, orientation='vertical', shrink=0.7, pad=0.02)
+        cbar.set_label('Prawdopodobieństwo występowania')
+        return sc
+
+    # Rysowanie obu map
+    rysuj_mape(ax1, true_probs, f'Prawdziwy rozkład bogactwa gatunkowego\n({title_suffix})')
+    rysuj_mape(ax2, pred_probs, f'Predykowany rozkład bogactwa gatunkowego\n({title_suffix})')
+
+    plt.tight_layout()
     
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 16),
-                                  subplot_kw={'projection': ccrs.PlateCarree()},
-                                  layout="constrained")
-
-    # Mapa 1: Prawdziwy rozkład
-    sc1 = ax1.scatter(gdf["Longitude"], gdf["Latitude"],
-                     c=true_probs, cmap=cmap, s=30, alpha=0.7,
-                     vmin=vmin, vmax=vmax)
-    ax1.coastlines()
-    # ax1.set_global() # Usunięcie set_global może pomóc w lepszym dopasowaniu
-    ax1.set_extent([-180, 180, -90, 90], crs=ccrs.PlateCarree())
-    ax1.set_title(f'Prawdziwy rozkład bogactwa gatunkowego\n{title_suffix}',
-                  fontsize=16, fontweight='bold', pad=20)
-
-    # Dodaj colorbar dla pierwszej mapy
-    plt.colorbar(sc1, ax=ax1, label='Prawdopodobieństwo', shrink=0.6, pad=0.02)
-
-    # Mapa 2: Predykowany rozkład
-    sc2 = ax2.scatter(gdf["Longitude"], gdf["Latitude"],
-                     c=pred_probs, cmap=cmap, s=30, alpha=0.7,
-                     vmin=vmin, vmax=vmax)
-    ax2.coastlines()
-    # ax2.set_global()
-    ax2.set_extent([-180, 180, -90, 90], crs=ccrs.PlateCarree())
-    ax2.set_title(f'Predykowany rozkład bogactwa gatunkowego\n{title_suffix}',
-                  fontsize=16, fontweight='bold', pad=20)
-
-    # Dodaj colorbar dla drugiej mapy
-    plt.colorbar(sc2, ax=ax2, label='Prawdopodobieństwo', shrink=0.6, pad=0.02)
-
-    # Zamiast tight_layout używamy constrained_layout zdefiniowanego w subplots
-    # plt.show(block=False) # Można zakomentować jeśli nie chcemy okna popup
-
-    plt.savefig(f'mapa_porownawcza_{title_suffix.replace(" ", "_").lower()}.png', 
-                dpi=150, bbox_inches='tight')
-    plt.show(block=False)
+    # Generowanie bezpiecznej nazwy pliku
+    safe_suffix = re.sub(r'[^\w\s-]', '', title_suffix).strip().replace(' ', '_').lower()
+    file_name = f'mapa_porownawcza_{safe_suffix}.png'
     
+    plt.savefig(file_name, dpi=300, bbox_inches='tight')
+    plt.close(fig) # Zwolnienie pamięci
+    
+    print(f"  ✔ Mapa została zapisana w pliku: {file_name}")
     return fig
 
 def pokaz_punkt_referencyjny(gdf, title="Punkt referencyjny (indeks 1)"):
@@ -68,28 +76,33 @@ def pokaz_punkt_referencyjny(gdf, title="Punkt referencyjny (indeks 1)"):
     
     # Wszystkie punkty szare
     ax.scatter(gdf["Longitude"], gdf["Latitude"], 
-               c='lightgray', s=20, alpha=0.5, label='Wszystkie punkty')
+               c='lightgray', s=20, alpha=0.5, label='Wszystkie punkty', transform=ccrs.PlateCarree())
     
     # Punkt referencyjny czerwony
     ax.scatter(ref_point[0], ref_point[1], 
-               c='red', s=100, marker='*', edgecolors='black', linewidth=2,
-               label=f'Punkt referencyjny (indeks 1)\n{ref_point[0]:.2f}°, {ref_point[1]:.2f}°')
+               c='red', s=100, marker='*', edgecolors='black', linewidth=1.5,
+               label=f'Punkt referencyjny (indeks 1)\n{ref_point[0]:.2f}°, {ref_point[1]:.2f}°',
+               transform=ccrs.PlateCarree(), zorder=5)
     
-    ax.coastlines()
+    ax.add_feature(cfeature.COASTLINE)
+    ax.add_feature(cfeature.LAND, facecolor='lightgray', alpha=0.1)
+    
+    # Ustawianie zasięgu globalnego lub lokalnego (tu globalny z lekkim zoomem jeśli trzeba)
     ax.set_global()
-    ax.legend(loc='upper left')
+    ax.legend(loc='upper left', frameon=True, shadow=True)
     ax.set_title(title, fontsize=14, fontweight='bold')
     
     # Dodaj adnotację z współrzędnymi
     ax.annotate(f'({ref_point[0]:.2f}°, {ref_point[1]:.2f}°)', 
-                xy=ref_point, xytext=(10, 10),
+                xy=(ref_point[0], ref_point[1]), xytext=(10, 10),
                 textcoords='offset points', fontsize=10,
                 bbox=dict(boxstyle='round,pad=0.3', facecolor='yellow', alpha=0.7),
-                arrowprops=dict(arrowstyle='->', connectionstyle='arc3,rad=0'))
+                arrowprops=dict(arrowstyle='->', connectionstyle='arc3,rad=0'),
+                transform=ccrs.PlateCarree())
     
     plt.tight_layout()
     plt.savefig('punkt_referencyjny.png', dpi=150, bbox_inches='tight')
-    plt.show()
+    plt.close(fig)
     
     print(f"  ✔ Punkt referencyjny: {ref_point}")
     print(f"  ✔ Indeks: {ref_idx}")

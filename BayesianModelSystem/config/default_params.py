@@ -6,7 +6,7 @@ def get_configuration():
         'csv_path': r"Global_2020_MarineSpeciesRichness_AquaMaps (4).csv",
         'base_params': {
             'cutoff_km': 1000,
-            'co_ktory': 40,
+            'co_ktory': 200,
             'n_observations': 400,
             'n_points': 0
         },
@@ -19,19 +19,19 @@ def get_configuration():
                 'mcmc_scale': 0.05,
                 'mcmc_seed': 42
             }),
-             # ('Model_Dwumianowy_sprzężony', {
-             #    'alpha_prior': 0.5,
-             #    'beta_prior': 0.5,
-             #    'smoothing_strength': 1,
-             #    'optimize_phi': False,
-             #    "phi": 4
-             # }),
-             # ('Model_Poissona_sprzężony', {
-             #    'alpha_prior': 0.5,
-             #    'beta_prior': 0.5,
-             #    'optimize_phi': False,
-             #    "phi": 4,
-             # }),
+             ('Model_Dwumianowy_sprzężony', {
+                'alpha_prior': 0.5,
+                'beta_prior': 0.5,
+                'smoothing_strength': 1,
+                'optimize_phi': False,
+                "phi": 4
+             }),
+             ('Model_Poissona_sprzężony', {
+                'alpha_prior': 0.5,
+                'beta_prior': 0.5,
+                'optimize_phi': False,
+                "phi": 4,
+             }),
              ('Model_Lenka', {
                 'variance': 1.0,
                 'distance_unit': "km",
@@ -63,10 +63,10 @@ def get_configuration():
             #     'mcmc_burn': 3000,
             #     'mcmc_scale': 0.05,
             #     'mcmc_seed': 42
-            # }),
+            #}),
             
-            # ('Model_Dirichleta', {}),
-            # ('Model_wygładzania_przestrzennego', {'smoothing_factor': 0.1})
+            ('Model_Dirichleta', {}),
+            ('Model_wygładzania_przestrzennego', {'smoothing_factor': 0.1})
         ],
         'impact_models_to_test': [
              ('Model_Dwumianowy_sprzężony', {
@@ -117,12 +117,12 @@ def get_configuration():
             ('Model_wygładzania_przestrzennego', {'smoothing_factor': 0.1})
         ],
         'db_path': 'wyniki_testow.csv',
-        'visualise': False,
+        'visualise': True,
         'save_results': False,
         'run_options': {"rt": True, "it":False, "lt": False, "nt": True},
         'lengthscale_list': [13000, 15000, 20000],
         'nemenyi_params': {
-            'n_observations': 500,
-            'k': 30
+            'n_observations': 7000,
+            'k': 100
         }
     }

@@ -1,5 +1,6 @@
 import numpy as np
 from .model_aksjomatyczny_preparamed import ModelAksjomatycznyPreparamed
+from .bayesian_helpers import vectorized_haversine
 
 class ModelAksjomatyczny(ModelAksjomatycznyPreparamed):
     """
@@ -23,43 +24,57 @@ class ModelAksjomatyczny(ModelAksjomatycznyPreparamed):
         
         if n_obs_points < 2:
             print("  ⚠️ Zbyt mało punktów z obserwacjami do estymacji. Używam domyślnego lengthscale.")
-            # Jeśli n_obs_points to 1, lengthscale pozostaje 1.0 (z __init__) lub bierzemy z bazy
         else:
             print(f"   - Punkty z obserwacjami: {n_obs_points} / {self.n}")
             
             # 1. Przygotowanie danych (Logarytmowanie z pseudocountem delta=1)
             Z = np.log(observed_counts + 1.0)
-            Z_bar = np.mean(Z)
             
-            # 2. Obliczanie średnich odległości metrycznych (mi_bar_i)
+            # 2. Obliczanie geometrii i różnic (Podejście parowe - bardziej stabilne)
             pts = np.array(self.space_points)[obs_mask]
             
-            print("   - Obliczanie geometrii przestrzeni (średnie odległości mi)...")
+            print("   - Obliczanie parowych różnic i odległości (wektorowo)...")
             
-            # Macierz odległości (n_obs x n_obs)
-            dist_matrix = np.zeros((n_obs_points, n_obs_points))
-            for i in range(n_obs_points):
-                for j in range(i + 1, n_obs_points):
-                    d = self.metric(pts[i], pts[j], return_unit=self.distance_unit)**(self.p)
-                    dist_matrix[i, j] = d
-                    dist_matrix[j, i] = d
+            # Wykorzystujemy zoptymalizowaną metrykę jeśli to możliwe
+            if self.metric.__name__ == 'haversine':
+                dist_matrix = vectorized_haversine(pts, pts, return_unit=self.distance_unit)**(self.p)
+            else:
+                # Fallback dla innych metryk (nadal pętla, ale rzadsza sytuacja)
+                dist_matrix = np.zeros((n_obs_points, n_obs_points))
+                for i in range(n_obs_points):
+                    for j in range(i + 1, n_obs_points):
+                        d = self.metric(pts[i], pts[j], return_unit=self.distance_unit)**(self.p)
+                        dist_matrix[i, j] = dist_matrix[j, i] = d
             
-            # mi_bar_i to średni dystans od punktu i do wszystkich innych punktów z obserwacjami
-            mi_bar = np.mean(dist_matrix, axis=1)
-            mi_bar = np.where(mi_bar == 0, 1e-9, mi_bar)
+            # 3. Estymacja parametru c (współczynnik zmienności na jednostkę dystansu)
+            upper_idx = np.triu_indices(n_obs_points, k=1)
             
-            # 3. Relatywistyczny Estymator c^2 z poprawką Bessela (n-1)
-            print(f"   - Stosowanie poprawki Bessela (n-1 = {n_obs_points-1})")
+            # Różnice log-gęstości
+            Z_col = Z[:, np.newaxis]
+            diff_matrix_sq = (Z_col - Z)**2
             
-            squared_diffs = (Z - Z_bar)**2
-            relative_variances = squared_diffs / mi_bar
+            dists = dist_matrix[upper_idx]
+            diffs = diff_matrix_sq[upper_idx]
             
-            c_squared = 1/((1.0 / (n_obs_points - 1)) * np.sum(relative_variances))
-            self.lengthscale = c_squared
-            
-            print(f"✅ ESTYMACJA ZAKOŃCZONA:")
-            print(f"   - Średnia log-gęstość (Z_bar): {Z_bar:.4f}")
-            print(f"   - Wyznaczona stała c (lengthscale): {self.lengthscale:.6f}")
+            valid_mask = dists > 1e-8 # Unikamy bardzo bliskich punktów
+            if np.any(valid_mask):
+                # Zależność: E[(Z_i - Z_j)^2] = variance * (dist_ij / L)^p
+                # => L^p = variance * dist_ij^p / E[(Z_i - Z_j)^2]
+                
+                # Używamy mediany dla odporności na szum Poissonowski
+                ratios = (self.variance * dists[valid_mask]) / (diffs[valid_mask] + 1e-12)
+                med_ratio = np.median(ratios)
+                if med_ratio > 0:
+                    self.lengthscale = (med_ratio)**(1.0 / self.p)
+                    # Ograniczamy do sensownego zakresu (np. 1km do 40000km - obwód Ziemi)
+                    self.lengthscale = np.clip(self.lengthscale, 1.0, 40000.0)
+                else:
+                    self.lengthscale = 1000.0
+            else:
+                self.lengthscale = 1000.0
+
+            c_est = 1.0 / self.lengthscale if self.lengthscale > 0 else 0
+            print(f"✅ ESTYMACJA ZAKOŃCZONA: L = {self.lengthscale:.6f} (c = {c_est:.6f})")
 
         print("-" * 50)
         # 4. Finalne przygotowanie macierzy kowariancji z nowym 'ls'

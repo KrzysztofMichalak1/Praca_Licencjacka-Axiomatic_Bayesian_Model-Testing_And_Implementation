@@ -1,7 +1,7 @@
 import pytest
 import numpy as np
 from BayesianModelSystem.Wczytywanie_danych.metric import haversine
-from BayesianModelSystem.Modele import ModelDirichleta, ModelGausowskiSprzezony
+from BayesianModelSystem.Modele import ModelDirichleta, ModelGausowskiSprzezony, ModelAksjomatyczny, ModelAksjomatycznyPreparamed
 
 @pytest.fixture(scope="module")
 def small_dataset():
@@ -10,6 +10,40 @@ def small_dataset():
     space_points = [(float(i * 10), float(j * 10)) for i in range(side) for j in range(side)]
     observed_indices = np.array([2, 3, 3, 5, 5, 5, 6, 7, 9, 9, 10, 10, 11, 13, 14, 14, 14, 14, 15, 15])
     return {"space_points": space_points, "n_points": n_points, "observed_indices": observed_indices}
+
+def test_axiomatic_model_smoke(small_dataset):
+    space_points, obs_idx = small_dataset["space_points"], small_dataset["observed_indices"]
+    model = ModelAksjomatyczny(
+        space_points=space_points, 
+        metric_func=haversine, 
+        observed_indices=obs_idx,
+        variance=1.0, 
+        distance_unit='km'
+    )
+    model.przygotuj_apriori()
+    assert model.lengthscale > 0
+    
+    # Very few samples for smoke test
+    model.przygotuj_predykcyjny(num_samples=10, burn_in=5, proposal_scale=0.1)
+    pred = model.posterior_mean()
+    assert pred.shape == (len(space_points),)
+    assert np.all(np.isfinite(pred))
+
+def test_axiomatic_preparamed_model_smoke(small_dataset):
+    space_points, obs_idx = small_dataset["space_points"], small_dataset["observed_indices"]
+    model = ModelAksjomatycznyPreparamed(
+        space_points=space_points, 
+        metric_func=haversine, 
+        observed_indices=obs_idx,
+        lengthscale=1000.0,
+        variance=1.0, 
+        distance_unit='km'
+    )
+    model.przygotuj_apriori()
+    model.przygotuj_predykcyjny(num_samples=10, burn_in=5, proposal_scale=0.1)
+    pred = model.posterior_mean()
+    assert pred.shape == (len(space_points),)
+    assert np.all(np.isfinite(pred))
 
 def test_dirichlet_model_smoke(small_dataset):
     model = ModelDirichleta(small_dataset["observed_indices"], small_dataset["n_points"])

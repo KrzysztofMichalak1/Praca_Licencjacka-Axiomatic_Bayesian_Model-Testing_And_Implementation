@@ -28,6 +28,33 @@ def w_from_x(x):
     u = np.log(x[1:] / x1)
     return u
 
+def vectorized_haversine(pts1, pts2, return_unit='km'):
+    """
+    pts1: (N, 2) array of (lon, lat)
+    pts2: (M, 2) array of (lon, lat)
+    Returns: (N, M) matrix of distances
+    """
+    pts1 = np.radians(pts1)
+    pts2 = np.radians(pts2)
+    
+    lon1, lat1 = pts1[:, 0], pts1[:, 1]
+    lon2, lat2 = pts2[:, 0], pts2[:, 1]
+    
+    # Reshape for broadcasting
+    lat1 = lat1[:, np.newaxis]
+    lon1 = lon1[:, np.newaxis]
+    
+    dlon = lon2 - lon1
+    dlat = lat2 - lat1
+    
+    a = np.sin(dlat/2.0)**2 + np.cos(lat1) * np.cos(lat2) * np.sin(dlon/2.0)**2
+    # Klipowanie dla stabilności numerycznej (uniknięcie NaN przy a > 1)
+    c = 2 * np.arcsin(np.sqrt(np.clip(a, 0.0, 1.0)))
+    
+    if return_unit == 'km':
+        return 6371.0 * c
+    return c
+
 class MultivariateNormalCholesky:
     def __init__(self, Sigma):
         print("▶ [MVN] Budowa rozkładu wielowymiarowego...")

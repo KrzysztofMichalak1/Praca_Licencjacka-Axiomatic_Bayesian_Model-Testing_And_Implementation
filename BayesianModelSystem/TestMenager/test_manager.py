@@ -128,7 +128,7 @@ class TestManager:
                     elif model_name == 'Model_Aksjomatyczny':
                         print(f"\n--- MODEL: {model_display_name.upper()} ---")
                         constructor_params = {
-                            'p': model_params.get('p', 0.8),
+                            'p': model_params.get('p', 1.0),
                             'space_points': points, 'metric_func': haversine, 'observed_indices': obs_idx,
                             'variance': model_params.get('variance', 1.0),
                             'distance_unit': model_params.get('distance_unit', 'km')
@@ -320,7 +320,7 @@ class TestManager:
             all_results.append(self.test(tp, i+1, n_tests, models_to_test, save, i==0))
         return all_results
 
-    def test_observation_length_impact(self, base_params, n_observations_list=None, models_to_test=None, k=5, save=False):
+    def test_observation_length_impact(self, base_params, n_observations_list=None, models_to_test=None, k=15, save=False):
         if n_observations_list is None: n_observations_list = [250, 750, 1000, 2000,4000,7000,10000,15000,20000, 35000, 50000, 100000]
         all_results = []
         self.prepare_data_once(base_params['cutoff_km'], base_params['co_ktory'], max(n_observations_list))
@@ -335,6 +335,26 @@ class TestManager:
         self._plot_observation_length_results(all_results)
         return all_results
 
+    def _clean_label(self, label):
+        """Oczyszcza nazwy modeli z podkreślników i końcówek numerycznych."""
+        import re
+        # Usuwamy końcówki typu _0, _1, -1 itp.
+        label = re.sub(r'[-_]\d+$', '', label)
+        # Zamieniamy podkreślniki na spacje i czyścimy białe znaki
+        label = label.replace('_', ' ').strip()
+        # Poprawiamy znane nazwy dla lepszej estetyki
+        replacements = {
+            'Model Lenka': 'Model Lenka',
+            'Model Aksjomatyczny preparamed': 'Model Aksjomatyczny (P)',
+            'Model Aksjomatyczny': 'Model Aksjomatyczny',
+            'Model Dirichleta': 'Model Dirichleta',
+            'Model wygładzania przestrzennego': 'Wygładzanie Przestrzenne'
+        }
+        for old, new in replacements.items():
+            if label == old:
+                return new
+        return label
+
     def _plot_observation_length_results(self, results):
         if not results: return
         data = []
@@ -342,7 +362,7 @@ class TestManager:
             if not r['success']: continue
             row = {'n_observations': r['n_observations'], 'k_run': r['k_run']}
             for m, met in r['metrics'].items():
-                # Pomijamy model Dirichleta
+                # Pomijamy model Dirichleta ze względu na zazwyczaj znacznie gorsze wyniki
                 if 'dirichlet' in m.lower():
                     continue
                 for name, val in met.items():
@@ -351,43 +371,62 @@ class TestManager:
             data.append(row)
         
         df = pd.DataFrame(data)
-        mean_df = df.groupby('n_observations').mean().reset_index()
+        mean_df = df.groupby('n_observations').mean(numeric_only=True).reset_index()
         
         # Lista metryk do narysowania (np. mse, mae, rmse)
         available_metrics = set()
         for col in mean_df.columns:
-            if '_' in col and col != 'n_observations' and col != 'k_run':
+            if '_' in col and col not in ['n_observations', 'k_run']:
                 metric_name = col.split('_')[-1]
                 available_metrics.add(metric_name)
         
         # Tworzymy osobny wykres dla każdej metryki
         timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+        
+        # Ustawienia estetyczne
+        plt.style.use('bmh') # Stabilny i czytelny styl
+        plt.rcParams.update({
+            'font.size': 10,
+            'axes.labelsize': 11,
+            'axes.titlesize': 13,
+            'legend.fontsize': 9,
+            'xtick.labelsize': 9,
+            'ytick.labelsize': 9,
+            'figure.autolayout': False
+        })
+        
         for metric in available_metrics:
-            plt.figure(figsize=(10, 6))
+            fig, ax = plt.subplots(figsize=(10, 6), dpi=300)
             metric_cols = [c for c in mean_df.columns if c.endswith(f'_{metric}')]
             
             if not metric_cols:
                 continue
                 
             for col in metric_cols:
-                label = col.replace(f'_{metric}', '')
-                plt.plot(mean_df['n_observations'], mean_df[col], marker='o', label=label)
+                raw_label = col.replace(f'_{metric}', '')
+                label = self._clean_label(raw_label)
+                ax.plot(mean_df['n_observations'], mean_df[col], marker='o', linewidth=1.5, markersize=5, label=label, alpha=0.8)
             
-            plt.title(f"Wpływ liczby obserwacji na {metric.upper()}")
-            plt.xlabel("Liczba obserwacji")
-            plt.ylabel(metric.upper())
-            plt.yscale('log')
-            plt.xscale('log')
-            plt.legend()
-            plt.grid(True)
+            ax.set_title(f"Wpływ liczby obserwacji na {metric.upper()}", pad=15, fontweight='bold')
+            ax.set_xlabel("Liczba obserwacji (skala log)", labelpad=10)
+            ax.set_ylabel(f"Wartość {metric.upper()} (skala log)", labelpad=10)
+            ax.set_yscale('log')
+            ax.set_xscale('log')
             
+            # Legenda umieszczona obok wykresu, by nie zasłaniała danych
+            ax.legend(bbox_to_anchor=(1.02, 1), loc='upper left', borderaxespad=0, frameon=True, fancybox=True, shadow=True)
+            
+            # Siatka: główna i pomocnicza (delikatna)
+            ax.grid(True, which="major", ls="-", alpha=0.6)
+            ax.grid(True, which="minor", ls=":", alpha=0.3)
+            
+            plt.tight_layout()
             file_name = f"observation_length_impact_{metric}_{timestamp}.png"
-            plt.savefig(file_name)
+            plt.savefig(file_name, bbox_inches='tight')
             print(f"  ✔ Zapisano wykres: {file_name}")
-            plt.show()
+            plt.close()
         
-        # --- NOWA SEKCJA: BOXPLOTY ---
-        # Wybieramy 5 konkretnych wartości n_observations: min, 25%, 50%, 75%, max
+        # --- BOXPLOTY ---
         unique_n_obs = sorted(df['n_observations'].unique())
         if len(unique_n_obs) >= 5:
             indices = [0, len(unique_n_obs)//4, len(unique_n_obs)//2, 3*len(unique_n_obs)//4, -1]
@@ -398,7 +437,7 @@ class TestManager:
         print(f"▶ [PLOT] Tworzenie boxplotów dla n_obs: {target_n_obs}")
         
         for metric in available_metrics:
-            plt.figure(figsize=(12, 8))
+            fig, ax = plt.subplots(figsize=(12, 7), dpi=300)
             
             # Przygotowujemy dane do boxplota (long format)
             metric_cols = [c for c in df.columns if c.endswith(f'_{metric}')]
@@ -409,21 +448,24 @@ class TestManager:
                               var_name='Model', value_name=metric.upper())
             
             # Czyścimy nazwy modeli
-            df_long['Model'] = df_long['Model'].str.replace(f'_{metric}', '')
+            df_long['Model'] = df_long['Model'].str.replace(f'_{metric}', '').apply(self._clean_label)
             
-            sns.boxplot(data=df_long, x='n_observations', y=metric.upper(), hue='Model')
+            sns.boxplot(data=df_long, x='n_observations', y=metric.upper(), hue='Model', palette="Set2", linewidth=1.0, ax=ax)
             
-            plt.title(f"Rozkład {metric.upper()} dla wybranych liczb obserwacji")
-            plt.xlabel("Liczba obserwacji")
-            plt.ylabel(metric.upper())
-            plt.yscale('log')
-            plt.grid(True, axis='y', alpha=0.3)
-            plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+            ax.set_title(f"Rozkład {metric.upper()} dla wybranych liczb obserwacji", pad=15, fontweight='bold')
+            ax.set_xlabel("Liczba obserwacji", labelpad=10)
+            ax.set_ylabel(f"Wartość {metric.upper()} (skala log)", labelpad=10)
+            ax.set_yscale('log')
+            ax.grid(True, axis='y', alpha=0.3, ls="--")
             
+            # Legenda obok wykresu
+            ax.legend(title="Modele", bbox_to_anchor=(1.02, 1), loc='upper left', borderaxespad=0, frameon=True)
+            
+            plt.tight_layout()
             file_name = f"observation_length_impact_boxplot_{metric.upper()}_{timestamp}.png"
             plt.savefig(file_name, bbox_inches='tight')
             print(f"  ✔ Zapisano boxplot: {file_name}")
-            plt.show()
+            plt.close()
 
     def test_lengthscale_impact(self, base_params, lengthscale_list=None, models_to_test=None, k=5, save=False):
         if lengthscale_list is None: lengthscale_list = [500, 1000, 2000, 5000, 10000]
@@ -458,45 +500,71 @@ class TestManager:
                     if isinstance(val, (int, float)): row[f"{m}_{name.lower()}"] = float(val)
             data.append(row)
         df = pd.DataFrame(data)
-        mean_df = df.groupby('lengthscale').mean().reset_index()
+        mean_df = df.groupby('lengthscale').mean(numeric_only=True).reset_index()
         
-        plt.figure(figsize=(10, 6))
+        timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+        plt.style.use('bmh')
+        plt.rcParams.update({
+            'font.size': 10,
+            'axes.labelsize': 11,
+            'axes.titlesize': 13,
+            'legend.fontsize': 9,
+            'xtick.labelsize': 9,
+            'ytick.labelsize': 9,
+        })
+        
+        fig, ax = plt.subplots(figsize=(10, 6), dpi=300)
+        
         for col in mean_df.columns:
             if col.endswith('_mse'):
-                plt.plot(mean_df['lengthscale'], mean_df[col], marker='o', label=col.replace('_mse',''))
-        plt.title("Wpływ parametru Lengthscale na MSE")
-        plt.xlabel("Lengthscale"); plt.ylabel("MSE (mean)"); plt.legend(); plt.grid(True)
-        plt.savefig(f"lengthscale_impact_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.png")
-        plt.show()
+                raw_label = col.replace('_mse','')
+                label = self._clean_label(raw_label)
+                ax.plot(mean_df['lengthscale'], mean_df[col], marker='s', linewidth=1.5, markersize=6, label=label, alpha=0.8)
+        
+        ax.set_title("Wpływ parametru Lengthscale na błąd MSE", pad=15, fontweight='bold')
+        ax.set_xlabel("Wartość Lengthscale (skala log)", labelpad=10)
+        ax.set_ylabel("Średni błąd kwadratowy MSE (skala log)", labelpad=10)
+        ax.set_xscale('log')
+        ax.set_yscale('log')
+        
+        ax.legend(bbox_to_anchor=(1.02, 1), loc='upper left', borderaxespad=0, frameon=True, fancybox=True, shadow=True)
+        ax.grid(True, which="major", ls="-", alpha=0.6)
+        ax.grid(True, which="minor", ls=":", alpha=0.3)
+        
+        plt.tight_layout()
+        file_name = f"lengthscale_impact_{timestamp}.png"
+        plt.savefig(file_name, bbox_inches='tight')
+        print(f"  ✔ Zapisano wykres: {file_name}")
+        plt.close()
 
     def _plot_critical_difference(self, avg_ranks, cd, k_runs):
         """Plots a Critical Difference diagram."""
         print(f"▶ [PLOT] Tworzenie wykresu Critical Difference (CD={cd:.4f})...")
         
         sorted_ranks = avg_ranks.sort_values()
-        names = sorted_ranks.index.tolist()
+        names = [self._clean_label(n) for n in sorted_ranks.index]
         values = sorted_ranks.values
         
         n_models = len(names)
         
-        plt.figure(figsize=(10, 2 + n_models * 0.4))
-        ax = plt.gca()
+        plt.style.use('bmh')
+        fig, ax = plt.subplots(figsize=(10, 3 + n_models * 0.4), dpi=300)
         
         # Draw horizontal axis for ranks
-        plt.axhline(0, color='black', linewidth=1)
+        ax.axhline(0, color='black', linewidth=1.2)
         rank_min = 1
-        rank_max = n_models
-        plt.xlim(rank_min - 0.5, rank_max + 0.5)
-        plt.xticks(range(int(rank_min), int(rank_max) + 1))
-        plt.xlabel('Średnia ranga (im niższa, tym lepiej)')
+        rank_max = max(n_models, 5) # Minimum 5 for visibility
+        ax.set_xlim(rank_min - 0.5, rank_max + 0.5)
+        ax.set_xticks(range(int(rank_min), int(rank_max) + 1))
+        ax.set_xlabel('Średnia ranga (im niższa, tym lepiej)', labelpad=10)
         
         # Plot model ranks
         for i, (name, rank) in enumerate(zip(names, values)):
             y_pos = -(i + 1) * 0.5
-            plt.plot([rank, rank], [0, y_pos], color='gray', linestyle='--', alpha=0.6)
-            plt.plot(rank, 0, 'ro')
-            plt.text(rank, y_pos - 0.1, f"{name}\n({rank:.2f})", 
-                     ha='center', va='top', fontweight='bold')
+            ax.plot([rank, rank], [0, y_pos], color='gray', linestyle='--', alpha=0.5, linewidth=1)
+            ax.plot(rank, 0, 'ro', markersize=6)
+            ax.text(rank, y_pos - 0.1, f"{name}\n({rank:.2f})", 
+                     ha='center', va='top', fontweight='bold', fontsize=9)
 
         # Find cliques (groups within CD)
         cliques = []
@@ -507,24 +575,23 @@ class TestManager:
         
         # Draw CD bar
         if cd > 0:
-            y_cd = 0.5
-            plt.plot([rank_min, rank_min + cd], [y_cd, y_cd], color='blue', linewidth=3)
-            plt.text(rank_min + cd/2, y_cd + 0.1, f'CD = {cd:.3f}', ha='center', color='blue', fontweight='bold')
+            y_cd = 0.6
+            ax.plot([rank_min, rank_min + cd], [y_cd, y_cd], color='#2c3e50', linewidth=3)
+            ax.text(rank_min + cd/2, y_cd + 0.1, f'CD = {cd:.3f}', ha='center', color='#2c3e50', fontweight='bold', fontsize=10)
 
             # Draw cliques
             for i, (start, end) in enumerate(cliques):
-                y_clique = 0.3 - (i * 0.05)
-                plt.plot([start, end], [y_clique, y_clique], color='black', linewidth=2)
+                y_clique = 0.4 - (i * 0.08)
+                ax.plot([start, end], [y_clique, y_clique], color='black', linewidth=2.5, alpha=0.7)
 
-        plt.title(f'Critical Difference Diagram (Nemenyi, alpha=0.05, runs={k_runs})', pad=20)
+        ax.set_title(f'Critical Difference Diagram (Nemenyi, α=0.05, runs={k_runs})', pad=25, fontweight='bold')
         ax.get_yaxis().set_visible(False)
-        plt.gca().spines['left'].set_visible(False)
-        plt.gca().spines['right'].set_visible(False)
-        plt.gca().spines['top'].set_visible(False)
+        for spine in ['left', 'right', 'top']:
+            ax.spines[spine].set_visible(False)
         
         plt.tight_layout()
-        plt.savefig(f"nemenyi_cd_diagram_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.png")
-        plt.show()
+        plt.savefig(f"nemenyi_cd_diagram_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.png", bbox_inches='tight')
+        plt.close()
 
     def test_nemenei(self, base_params, models_to_test=None, n_observations=None, k=10, save=False):
         """Runs k tests for a specific n_observations and performs Nemenyi-style rank analysis."""

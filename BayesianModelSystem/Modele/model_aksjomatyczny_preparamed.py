@@ -33,21 +33,36 @@ class ModelAksjomatycznyPreparamed:
         print("  ✔ Model gotowy.\n")
 
     def przygotuj_apriori(self):
-        print("▶ [APRIORI] Budowa macierzy kowariancji...")
-        p1 = self.space_points[0]
-        Sigma_w = np.zeros((self.m, self.m))
-        for i in range(self.m):
-            pi = self.space_points[i+1]
-            d_i1 = (self.metric(pi, p1, return_unit=self.distance_unit)/self.lengthscale)**(self.p)
-            Sigma_w[i, i] = d_i1
-            for j in range(i+1, self.m):
-                pj = self.space_points[j+1]
-                d_j1 = (self.metric(pj, p1, return_unit=self.distance_unit)/self.lengthscale)**(self.p)
-                d_ij = (self.metric(pi, pj, return_unit=self.distance_unit)/self.lengthscale)**(self.p)
-                cov_ij = (d_i1 + d_j1 - d_ij) / 2.0
-                Sigma_w[i, j] = cov_ij
-                Sigma_w[j, i] = cov_ij 
-        self.Sigma_u = Sigma_w      
+        print("▶ [APRIORI] Budowa macierzy kowariancji (wektorowo)...")
+        from .bayesian_helpers import vectorized_haversine
+        
+        # Punkty p2...pn (wszystkie poza pierwszym)
+        pts_rest = np.array(self.space_points[1:])
+        p1 = np.array([self.space_points[0]])
+        
+        # 1. Odległości od punktu referencyjnego p1
+        if self.metric.__name__ == 'haversine':
+            d_i1 = (vectorized_haversine(pts_rest, p1, return_unit=self.distance_unit).flatten() / self.lengthscale)**(self.p)
+            # 2. Odległości między wszystkimi parami (poza p1)
+            dist_matrix_rest = vectorized_haversine(pts_rest, pts_rest, return_unit=self.distance_unit)
+        else:
+            # Fallback (wolniejszy)
+            d_i1 = np.array([(self.metric(pi, self.space_points[0], return_unit=self.distance_unit)/self.lengthscale)**(self.p) for pi in pts_rest])
+            from scipy.spatial.distance import cdist
+            dist_matrix_rest = cdist(pts_rest, pts_rest, metric='euclidean')
+
+        d_ij = (dist_matrix_rest / self.lengthscale)**(self.p)
+        
+        # 3. Formuła kowariancji: cov(wi, wj) = 0.5 * sigma^2 * (d_i1 + d_j1 - d_ij)
+        # Zgodnie z teorią pól aksjomatycznych sigma^2 (variance) skaluje całą macierz.
+        D_i1 = d_i1[:, np.newaxis]
+        D_j1 = d_i1[np.newaxis, :]
+        
+        self.Sigma_u = self.variance * 0.5 * (D_i1 + D_j1 - d_ij)
+        
+        # 4. Stabilizacja (nugget) - zwiększona dla stabilności przy dużych macierzach
+        self.Sigma_u += np.eye(self.m) * 1e-8
+        
         self.mvn_u = MultivariateNormalCholesky(self.Sigma_u)
         self.counts_f = self.counts.astype(np.float64)
         print("  ✔ Prekomputacja stałych zakończona.")
