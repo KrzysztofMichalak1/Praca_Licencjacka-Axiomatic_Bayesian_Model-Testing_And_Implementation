@@ -61,7 +61,7 @@ class ModelAksjomatycznyPreparamed:
         self.Sigma_u = self.variance * 0.5 * (D_i1 + D_j1 - d_ij)
         
         # 4. Stabilizacja (nugget) - zwiększona dla stabilności przy dużych macierzach
-        self.Sigma_u += np.eye(self.m) * 1e-8
+        #self.Sigma_u += np.eye(self.m) * 1e-8
         
         self.mvn_u = MultivariateNormalCholesky(self.Sigma_u)
         self.counts_f = self.counts.astype(np.float64)

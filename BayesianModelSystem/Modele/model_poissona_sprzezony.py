@@ -110,6 +110,10 @@ class ModelPoissonaSprzezony(BayesianSpatialModel):
             weights = weights / np.sum(weights)
             predictions[:, j] = np.dot(lambda_samples_obs, weights)
         
+        # Normalizacja: każdy wiersz (próbka) musi sumować się do 1
+        row_sums = predictions.sum(axis=1, keepdims=True)
+        predictions = np.divide(predictions, row_sums, out=np.zeros_like(predictions), where=row_sums!=0)
+        
         mean_pred = np.mean(predictions, axis=0)
         lower_pred, upper_pred = np.percentile(predictions, [2.5, 97.5], axis=0)
         return (mean_pred, (lower_pred, upper_pred), predictions) if return_samples else (mean_pred, (lower_pred, upper_pred))

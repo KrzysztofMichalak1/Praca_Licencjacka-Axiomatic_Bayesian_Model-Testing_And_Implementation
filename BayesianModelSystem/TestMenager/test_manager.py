@@ -298,10 +298,67 @@ class TestManager:
         return {'better_counts': better_counts, 'equal_count': equal_count, 'best_model': best_model, 'best_mse': best_mse}
 
     def _save_to_database(self, test_params, metrics, comparison_stats, models_to_test, duration):
-        test_ids = []
+        """Aggregates and saves ALL model metrics, creating multiple rows if necessary."""
+        
+        # 1. Grupuj modele wg typów
+        groups = {'bayesian': [], 'dirichlet': [], 'gp': [], 'spatial': []}
+        better_counts = comparison_stats.get('better_counts', {})
+        
         for model_key, model_metrics in metrics.items():
-            test_id = self.db.save_test_results(test_params, model_metrics, {}, {}, {}, comparison_stats, duration)
-            test_ids.append(test_id)
+            key_lower = model_key.lower()
+            cat = None
+            if 'aksjomatyczny' in key_lower or 'lenka' in key_lower: cat = 'bayesian'
+            elif 'dirichlet' in key_lower: cat = 'dirichlet'
+            elif any(x in key_lower for x in ['gausowski', 'poissona', 'dwumianowy', 'gp']): cat = 'gp'
+            elif any(x in key_lower for x in ['wygladzania', 'wygładzania', 'spatial']): cat = 'spatial'
+            
+            if cat:
+                groups[cat].append({
+                    'name': model_key,
+                    'metrics': model_metrics,
+                    'better_count': better_counts.get(model_key, 0)
+                })
+
+        # 2. Wyznacz liczbę potrzebnych wierszy (tyle, by każdy model wystąpił co najmniej raz)
+        num_rows = max([len(v) for v in groups.values()] + [1])
+        test_ids = []
+
+        # 3. Wyciągnij parametry wspólne dla całego testu
+        if models_to_test:
+            p = models_to_test[0][1]
+            for k in ['lengthscale', 'variance', 'mcmc_samples', 'mcmc_burn', 'mcmc_scale', 'mcmc_seed']:
+                if k in p: test_params[k] = p[k]
+
+        # 4. Generuj wiersze
+        for i in range(num_rows):
+            # Wybieramy dane dla każdego slotu (jeśli modele się skończyły, bierzemy ostatni dostępny)
+            row_data = {}
+            row_names = {}
+            row_comp_stats = {'equal_count': comparison_stats.get('equal_count', 0)}
+            
+            for cat in ['bayesian', 'dirichlet', 'gp', 'spatial']:
+                models_in_cat = groups[cat]
+                if models_in_cat:
+                    # Bierzemy i-ty model lub ostatni, jeśli i wykracza poza zakres
+                    idx = min(i, len(models_in_cat) - 1)
+                    m = models_in_cat[idx]
+                    row_data[cat] = m['metrics']
+                    row_names[cat] = m['name']
+                    row_comp_stats[f'{cat}_better_count'] = m['better_count']
+                else:
+                    row_data[cat] = {}
+                    row_names[cat] = ''
+                    row_comp_stats[f'{cat}_better_count'] = 0
+
+            # Zapisz wiersz
+            tid = self.db.save_test_results(
+                test_params, 
+                row_data['bayesian'], row_data['dirichlet'], row_data['gp'], row_data['spatial'],
+                row_comp_stats, duration, names=row_names
+            )
+            test_ids.append(tid)
+            print(f"  ✔ Zapisano wyniki modelu: {row_names['bayesian'] or row_names['gp'] or 'Model'}")
+
         return test_ids
     
     def _print_test_summary(self, metrics, comparison_stats, duration):
@@ -320,7 +377,7 @@ class TestManager:
             all_results.append(self.test(tp, i+1, n_tests, models_to_test, save, i==0))
         return all_results
 
-    def test_observation_length_impact(self, base_params, n_observations_list=None, models_to_test=None, k=15, save=False):
+    def test_observation_length_impact(self, base_params, n_observations_list=None, models_to_test=None, k=5, save=False):
         if n_observations_list is None: n_observations_list = [250, 750, 1000, 2000,4000,7000,10000,15000,20000, 35000, 50000, 100000]
         all_results = []
         self.prepare_data_once(base_params['cutoff_km'], base_params['co_ktory'], max(n_observations_list))
@@ -481,7 +538,7 @@ class TestManager:
                 current_models.append((name, new_params))
             
             for j in range(k):
-                res = self.test(base_params, len(all_results)+1, len(lengthscale_list)*k, current_models, save=False)
+                res = self.test(base_params, len(all_results)+1, len(lengthscale_list)*k, current_models, save=save)
                 if res['success']:
                     res['lengthscale'], res['k_run'] = ls, j
                     all_results.append(res)

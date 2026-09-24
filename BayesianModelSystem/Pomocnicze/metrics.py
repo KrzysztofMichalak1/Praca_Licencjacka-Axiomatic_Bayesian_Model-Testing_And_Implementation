@@ -7,8 +7,8 @@ def oblicz_metryki(true_probs, pred_probs, model_name, verbose=True):
         print(f"\n📈 METRYKI DLA {model_name}:")
     n=len(pred_probs)
     # Podstawowe metryki
-    mse = float(np.mean(((pred_probs - true_probs)*n)**2))
-    mae = float(np.mean(np.abs(pred_probs - true_probs)*n))
+    mse = float(np.mean(((pred_probs - true_probs))**2))
+    mae = float(np.mean(np.abs(pred_probs - true_probs)))
     rmse = float(np.sqrt(mse))
     corr = float(np.corrcoef(pred_probs, true_probs)[0, 1])
     covariance = float(np.cov(pred_probs, true_probs)[0, 1])

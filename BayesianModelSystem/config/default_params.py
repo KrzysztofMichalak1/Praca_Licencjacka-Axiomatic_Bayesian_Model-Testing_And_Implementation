@@ -6,7 +6,7 @@ def get_configuration():
         'csv_path': r"Global_2020_MarineSpeciesRichness_AquaMaps (4).csv",
         'base_params': {
             'cutoff_km': 1000,
-            'co_ktory': 200,
+            'co_ktory': 50,
             'n_observations': 400,
             'n_points': 0
         },
@@ -118,11 +118,11 @@ def get_configuration():
         ],
         'db_path': 'wyniki_testow.csv',
         'visualise': True,
-        'save_results': False,
-        'run_options': {"rt": True, "it":False, "lt": False, "nt": True},
-        'lengthscale_list': [13000, 15000, 20000],
+        'save_results': True,
+        'run_options': {"rt": True, "it":True, "lt": False, "nt": True},
+        'lengthscale_list': [100,250,500,1000,2500,5000,10000,25000,50000,100000],
         'nemenyi_params': {
-            'n_observations': 7000,
+            'n_observations': 400,
             'k': 100
         }
     }

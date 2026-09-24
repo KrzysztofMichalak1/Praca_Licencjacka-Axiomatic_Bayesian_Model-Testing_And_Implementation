@@ -1,7 +1,7 @@
 """This module contains the main program logic."""
 from .TestMenager.test_manager import TestManager
 
-def program(base_params, csv_path, n_tests=1, models_to_test=None, save_results=False, run_options={"rt":False,"it":False, "lt":False, "nt":False}, impact_models_to_test=None, k=15, lengthscale_list=None, db_path="wyniki_testow.csv", visualise=False, nemenyi_params=None, **kwargs):
+def program(base_params, csv_path, n_tests=1, models_to_test=None, save_results=False, run_options={"rt":False,"it":False, "lt":False, "nt":False}, impact_models_to_test=None, k=5, lengthscale_list=None, db_path="wyniki_testow.csv", visualise=False, nemenyi_params=None, **kwargs):
     """Main program function."""
     print("================================================")
     print("🎯 SYSTEM TESTOWANIA MODELI BAYESOWSKICH")

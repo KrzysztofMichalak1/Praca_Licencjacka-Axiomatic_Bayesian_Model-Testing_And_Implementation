@@ -17,43 +17,53 @@ def stworz_mape_porownawcza(gdf, true_probs, pred_probs, title_suffix=""):
     print(f"    - Zakres prawdopodobieństwa: [{vmin:.2e}, {vmax:.2e}]")
     
     # Tworzenie figury
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 16), dpi=300,
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 11), dpi=300,
                                   subplot_kw={'projection': ccrs.PlateCarree()})
 
-    plt.rcParams.update({'font.size': 12, 'axes.titlesize': 14})
-    cmap = 'viridis'
+    plt.rcParams.update({'font.size': 12, 'axes.titlesize': 13})
+    cmap = 'magma'
 
     # Funkcja pomocnicza do rysowania pojedynczej mapy
     def rysuj_mape(ax, data, title):
         sc = ax.scatter(gdf["Longitude"], gdf["Latitude"],
-                         c=data, cmap=cmap, s=30, alpha=0.8,
+                         c=data, cmap=cmap, s=75, alpha=0.95,
                          vmin=vmin, vmax=vmax, edgecolors='none', transform=ccrs.PlateCarree())
         
         # Dodawanie cech geograficznych
-        ax.add_feature(cfeature.COASTLINE, linewidth=0.5, zorder=2)
-        ax.add_feature(cfeature.BORDERS, linewidth=0.3, linestyle=':', zorder=2)
-        ax.add_feature(cfeature.LAND, facecolor='lightgray', alpha=0.2, zorder=1)
-        ax.add_feature(cfeature.OCEAN, facecolor='aliceblue', alpha=0.1, zorder=0)
+        ax.add_feature(cfeature.COASTLINE, linewidth=0.8, zorder=3)
+        ax.add_feature(cfeature.BORDERS, linewidth=0.4, linestyle=':', zorder=3)
+        ax.add_feature(cfeature.LAND, facecolor='#f9f9f9', alpha=1.0, zorder=1)
+        ax.add_feature(cfeature.OCEAN, facecolor='#e0f2ff', alpha=1.0, zorder=0)
+        
+        # Dodawanie siatki (gridlines)
+        gl = ax.gridlines(draw_labels=True, dms=True, x_inline=False, y_inline=False, 
+                         alpha=0.1, linestyle='--', color='gray', zorder=2)
+        gl.top_labels = False
+        gl.right_labels = False
+        gl.bottom_labels = (ax == ax2) # Etykiety dolne tylko na dolnej mapie
         
         # Ustawianie zasięgu na podstawie danych
         lon_min, lon_max = gdf["Longitude"].min(), gdf["Longitude"].max()
         lat_min, lat_max = gdf["Latitude"].min(), gdf["Latitude"].max()
-        padding = 2.0
+        padding = 3.0
         ax.set_extent([lon_min - padding, lon_max + padding, 
                         lat_min - padding, lat_max + padding], crs=ccrs.PlateCarree())
         
-        ax.set_title(title, fontweight='bold', pad=15)
-        
-        # Colorbar
-        cbar = plt.colorbar(sc, ax=ax, orientation='vertical', shrink=0.7, pad=0.02)
-        cbar.set_label('Prawdopodobieństwo występowania')
+        ax.set_title(title, fontweight='bold', pad=5)
         return sc
 
     # Rysowanie obu map
-    rysuj_mape(ax1, true_probs, f'Prawdziwy rozkład bogactwa gatunkowego\n({title_suffix})')
-    rysuj_mape(ax2, pred_probs, f'Predykowany rozkład bogactwa gatunkowego\n({title_suffix})')
+    sc1 = rysuj_mape(ax1, true_probs, f'Prawdziwy rozkład bogactwa gatunkowego ({title_suffix})')
+    sc2 = rysuj_mape(ax2, pred_probs, f'Predykowany rozkład bogactwa gatunkowego ({title_suffix})')
 
-    plt.tight_layout()
+    # Dodanie wspólnego paska koloru (colorbar) na dole
+    fig.subplots_adjust(bottom=0.12, hspace=0.02, top=0.96, left=0.05, right=0.95)
+    cbar_ax = fig.add_axes([0.3, 0.06, 0.4, 0.02]) # [left, bottom, width, height]
+    cbar = fig.colorbar(sc2, cax=cbar_ax, orientation='horizontal')
+    cbar.set_label('Prawdopodobieństwo występowania', fontweight='bold', labelpad=10)
+    
+    # Usuwamy tight_layout bo ręcznie ustawiliśmy subplots_adjust i colorbar
+    # plt.tight_layout()
     
     # Generowanie bezpiecznej nazwy pliku
     safe_suffix = re.sub(r'[^\w\s-]', '', title_suffix).strip().replace(' ', '_').lower()

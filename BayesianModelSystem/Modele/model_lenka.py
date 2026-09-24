@@ -13,6 +13,10 @@ class ModelLenka(ModelLenkaPreparamed):
                  num_samples_search=100, burn_in_search=50, 
                  proposal_scale_search=0.05):
         
+        # Enforce positive search params for numerical sanity
+        start_ls = max(1e-5, start_ls)
+        step_size = max(1e-5, step_size)
+        
         super().__init__(space_points, metric_func, observed_indices, 
                          lengthscale=1.0, variance=variance, 
                          distance_unit=distance_unit, mu_prior=mu_prior)
@@ -30,63 +34,91 @@ class ModelLenka(ModelLenkaPreparamed):
         print(f"   - Kroki bisekcji (k): {k_steps}")
 
     def _evaluate_lengthscale(self, ls):
-        print(f"    [EVAL] ls={ls:.0f}")
+        print(f"    [EVAL] ls={ls:.2f}")
         try:
-            from scipy.spatial.distance import cdist
-            if self.distance_unit == 'km':
-                distances = cdist(self.space_points, self.space_points, metric='euclidean')
-            else:
-                # Ujednolicona logika mierzenia dystansu z klasą bazową
-                distances = np.zeros((len(self.space_points), len(self.space_points)))
-                for i in range(len(self.space_points)):
-                    for j in range(len(self.space_points)):
+            # Ujednolicona, prekomputowana macierz odległości z klasą bazową dla spójności i wydajności
+            if not hasattr(self, 'dist_matrix') or self.dist_matrix is None:
+                self.dist_matrix = np.zeros((self.n, self.n))
+                for i in range(self.n):
+                    for j in range(i, self.n):
                         try:
-                            distances[i, j] = self.metric(self.space_points[i], self.space_points[j], return_unit=self.distance_unit)
+                            dist = self.metric(self.space_points[i], self.space_points[j], return_unit=self.distance_unit)
                         except TypeError:
-                            distances[i, j] = self.metric(self.space_points[i], self.space_points[j])
+                            dist = self.metric(self.space_points[i], self.space_points[j])
+                        self.dist_matrix[i, j] = self.dist_matrix[j, i] = dist
+            
+            distances = self.dist_matrix
             
             # SPÓJNOŚĆ MATEMATYCZNA: Zgodnie z równaniem 41
             K = self.variance * np.exp(-(distances / ls)**2)
             n = K.shape[0]
-            K = K + np.eye(n) * 1e-8
             
-            try:
-                L = np.linalg.cholesky(K)
-            except np.linalg.LinAlgError:
-                K = K + np.eye(n) * 1e-6
-                L = np.linalg.cholesky(K)
+            # STABILNY ROZKŁAD CHOLESKIEGO: Adaptacyjna stabilizacja przekątnej (jitter/nugget)
+            L = None
+            jitter = 1e-8 * self.variance
+            for attempt in range(10):
+                try:
+                    L = np.linalg.cholesky(K + np.eye(n) * jitter)
+                    break
+                except np.linalg.LinAlgError:
+                    jitter *= 10.0
             
-            K_inv = np.linalg.inv(K)
+            if L is None:
+                # Ostateczny fallback w przypadku ekstremalnych błędów
+                L = np.linalg.cholesky(K + np.eye(n) * (1e-2 * self.variance))
+            
+            # Wysoce stabilne obliczenie odwrócenia K_inv za pomocą solve_triangular (znacznie bezpieczniejsze niż np.linalg.inv)
+            L_inv = solve_triangular(L, np.eye(n), lower=True)
+            K_inv = L_inv.T @ L_inv
+            
             log_det_K = 2 * np.sum(np.log(np.diag(L)))
             log_prior_norm_const = -0.5 * n * np.log(2 * np.pi) - 0.5 * log_det_K
             
-            samples = []
+            samples_lp = []
             current_z = np.random.randn(n) * 0.1
+            log_post_current = log_posterior_logistic_normal_fast(
+                current_z, self.counts, self.N, K_inv, log_prior_norm_const, self.mu_prior
+            )
             for _ in range(self.num_samples_search + self.burn_in_search):
                 proposal = current_z + np.random.randn(n) * self.proposal_scale_search
-                log_post_current = log_posterior_logistic_normal_fast(
-                    current_z, self.counts, self.N, K_inv, log_prior_norm_const, self.mu_prior
-                )
                 log_post_proposal = log_posterior_logistic_normal_fast(
                     proposal, self.counts, self.N, K_inv, log_prior_norm_const, self.mu_prior
                 )
-                if np.log(np.random.rand()) < (log_post_proposal - log_post_current):
-                    current_z = proposal
+                
+                # Stabilne przejście MCMC dla stanów nieskończonych/not-finite
+                if np.isfinite(log_post_proposal):
+                    if not np.isfinite(log_post_current) or np.log(np.random.rand()) < (log_post_proposal - log_post_current):
+                        current_z = proposal
+                        log_post_current = log_post_proposal
+                
                 if _ >= self.burn_in_search:
-                    samples.append(current_z.copy())
+                    samples_lp.append(log_post_current)
             
-            if not samples: return -np.inf
-            n_samples_for_eval = min(50, len(samples))
-            log_post_samples = [log_posterior_logistic_normal_fast(z, self.counts, self.N, K_inv, log_prior_norm_const, self.mu_prior) for z in samples[:n_samples_for_eval]]
-            mean_log_post = np.mean([lp for lp in log_post_samples if np.isfinite(lp)]) if any(np.isfinite(log_post_samples)) else -np.inf
-            print(f"    [EVAL-OK] ls={ls:.0f}, score={mean_log_post:.2f}")
+            if not samples_lp: 
+                return -np.inf
+            
+            # Obliczamy średnią ze skończonych log-posteriorów
+            finite_lps = [lp for lp in samples_lp if np.isfinite(lp)]
+            mean_log_post = np.mean(finite_lps) if finite_lps else -np.inf
+            print(f"    [EVAL-OK] ls={ls:.2f}, score={mean_log_post:.2f}")
             return mean_log_post
         except Exception as e:
-            print(f"    [EVAL-ERR] ls={ls:.0f}, błąd: {e}")
+            print(f"    [EVAL-ERR] ls={ls:.2f}, błąd: {e}")
             return -np.inf
 
     def przygotuj_apriori(self):
         print("▶ [MODEL-LENKA] Rozpoczynanie poszukiwania optymalnego 'lengthscale'...")
+        
+        # Obliczenie macierzy odległości raz na początku dla spójności i optymalizacji wydajności
+        self.dist_matrix = np.zeros((self.n, self.n))
+        for i in range(self.n):
+            for j in range(i, self.n):
+                try:
+                    dist = self.metric(self.space_points[i], self.space_points[j], return_unit=self.distance_unit)
+                except TypeError:
+                    dist = self.metric(self.space_points[i], self.space_points[j])
+                self.dist_matrix[i, j] = self.dist_matrix[j, i] = dist
+
         current_ls = self.start_ls
         current_score = self._evaluate_lengthscale(current_ls)
         
