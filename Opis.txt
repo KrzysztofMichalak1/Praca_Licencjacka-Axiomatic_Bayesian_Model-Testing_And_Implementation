@@ -1,0 +1,147 @@
+
+Projekt jest zaawansowanym narzędziem napisanym w Pythonie, przeznaczonym do testowania i porównywania wydajności różnych, niestandardowo zaimplementowanych modeli bayesowskich w kontekście geoprzestrzennym.
+
+**Kluczowe Cele i Architektura:**
+
+Głównym celem projektu jest ocena, jak dobrze różne modele statystyczne potrafią odtworzyć znany, przestrzenny rozkład prawdopodobieństwa na podstawie rzadkich obserwacji. System nie operuje na nieznanych danych w celu predykcji, lecz tworzy kontrolowane środowisko symulacyjne:
+1.  **Tworzenie Środowiska:** Z pliku CSV z danymi o rozmieszczeniu gatunków morskich (`Global_2020...`) tworzona jest siatka punktów geograficznych. Dane te są filtrowane do określonego obszaru (np. Pacyfiku).
+2.  **Definicja Prawdy Podstawowej:** Na podstawie liczby gatunków w każdym punkcie siatki tworzony jest "prawdziwy" rozkład prawdopodobieństwa.
+3.  **Generowanie Obserwacji:** Z tego "prawdziwego" rozkładu losowane są obserwacje, symulując proces zbierania danych w terenie.
+4.  **Modelowanie i Ocena:** Różne modele statystyczne otrzymują te rzadkie obserwacje i ich zadaniem jest estymacja całego, bazowego rozkładu prawdopodobieństwa. Wyniki są następnie porównywane z "prawdą podstawową" w celu oceny dokładności każdego modelu.
+
+**Struktura Modułów:**
+
+-   **`BayesianModelSystem/`**: Główny katalog aplikacji.
+    -   **`app.py` / `program.py`**: Punkty wejścia. `app.py` uruchamia `program.py`, który definiuje sekwencję eksperymentów do przeprowadzenia (np. testy standardowe, badanie wpływu liczby obserwacji).
+    -   **`Wczytywanie_danych/`**: Odpowiada za wczytanie danych z CSV, filtrowanie geograficzne i przygotowanie środowiska symulacyjnego. Kluczowa funkcja to `przygotuj_dane`.
+    -   **`TestMenager/`**: Silnik aplikacji. Klasa `TestManager` zarządza przebiegiem eksperymentów: inicjalizuje modele, przekazuje im dane, uruchamia ich algorytmy, zbiera wyniki i oblicza metryki (MSE, MAE itp.).
+    -   **`Modele/`**: Serce projektu. Zawiera implementacje różnych modeli statystycznych. Każdy model stanowi odrębną strategię estymacji rozkładu przestrzennego:
+
+        -   **`DirichletModel` (`dirichlet_model.py`):**
+            -   **Typ:** Model bazowy, nielokalny (ignorujący przestrzeń).
+            -   **Metoda:** Używa rozkładu Dirichleta jako sprzężonego priora dla rozkładu wielomianowego. Jest to najprostszy model odniesienia.
+            -   **Proces:** Zlicza obserwacje w każdej lokalizacji, stosuje wygładzanie Laplace'a (dodając 1 do każdej liczby), a następnie oblicza oczekiwane prawdopodobieństwo posterior.
+            -   **Cel:** Służy jako fundamentalny punkt odniesienia do oceny przyrostu dokładności uzyskanego dzięki bardziej złożonym modelom przestrzennym.
+
+        -   **`BayesianFieldModel` (`bayesian_field_model.py`):**
+            -   **Typ:** Główny model przestrzenny.
+            -   **Metoda:** Implementuje bayesowskie pole losowe przy użyciu Procesu Gaussowskiego (GP). Zakłada, że obserwacje pochodzą z ukrytego (latentnego) pola gaussowskiego `w`. Prawdopodobieństwa `p` w każdej lokalizacji są wynikiem transformacji tego pola za pomocą funkcji probit (`p = Φ(w)`).
+            -   **Proces:**
+                1.  **Prior:** Definiuje rozkład a priori nad ukrytym polem `w` jako wielowymiarowy rozkład normalny `N(0, Σ)`, gdzie macierz kowariancji `Σ` zależy od odległości między punktami i hiperparametru `lengthscale`.
+                2.  **Próbkowanie:** Używa algorytmu MCMC Metropolis-Hastings do próbkowania z rozkładu a posteriori `p(w | dane)`.
+                3.  **Predykcja:** Ostateczna estymacja prawdopodobieństwa dla każdej lokalizacji jest średnią z próbek `w` przetransformowanych funkcją probit.
+            -   **Cel:** Główny mechanizm modelowania przestrzennego w projekcie, jawnie uwzględniający zasadę, że obiekty bliższe sobie są bardziej powiązane.
+
+        -   **`LogisticNormalMCMC` (`Lenks_model.py`):**
+            -   **Typ:** Alternatywny model przestrzenny.
+            -   **Metoda:** Wariant modelu z polem gaussowskim, który zamiast funkcji probit używa transformacji **softmax** do przekształcenia ukrytego pola `Z` na prawdopodobieństwa `p`.
+            -   **Proces:**
+                1.  **Prior:** Zakłada, że ukryte pole `Z` pochodzi z wielowymiarowego rozkładu normalnego `N(μ, K)`.
+                2.  **Wiarygodność:** Obserwowane zliczenia są modelowane rozkładem wielomianowym (Multinomial), gdzie prawdopodobieństwa kategorii pochodzą z transformacji softmax pola `Z`.
+                3.  **Próbkowanie:** Używa MCMC do próbkowania z rozkładu a posteriori `p(Z | dane)`.
+                4.  **Predykcja:** Finalne prawdopodobieństwa są średnią z próbek `Z` przetransformowanych funkcją softmax.
+            -   **Cel:** Stanowi alternatywę dla `BayesianFieldModel`, oferując inny sposób powiązania ukrytego pola przestrzennego z obserwowanymi danymi.
+
+        -   **`BayesianFieldModelCVGridSearch` (`bayesian_field_grid_model.py`):**
+            -   **Typ:** Rozszerzenie `BayesianFieldModel` o strojenie hiperparametru.
+            -   **Metoda:** Automatycznie wyszukuje optymalną wartość hiperparametru `lengthscale` poprzez przeszukiwanie siatki (grid search) połączone z walidacją krzyżową (K-fold cross-validation).
+            -   **Proces:** Iteruje po zdefiniowanej siatce wartości `lengthscale`, dla każdej z nich przeprowadzając walidację krzyżową w celu oceny jej jakości. Wybierany jest `lengthscale`, który daje najlepszą generalizację na danych walidacyjnych.
+            -   **Cel:** Solidna, choć kosztowna obliczeniowo, metoda wyboru najlepszego `lengthscale`, co poprawia zdolność generalizacji modelu.
+
+        -   **`BayesianFieldModelAdaptiveSearchBinary` (`bayesian_adaptive_search_model.py`):**
+            -   **Typ:** Rozszerzenie `BayesianFieldModel` o strojenie hiperparametru.
+            -   **Metoda:** Efektywniejsza alternatywa dla grid search. Używa algorytmu przypominającego wyszukiwanie binarne do znalezienia `lengthscale`, który maksymalizuje wiarygodność brzegową.
+            -   **Proces:** Zaczynając od szerokiego zakresu dla `lengthscale`, iteracyjnie zawęża przedział poszukiwań, oceniając punkty środkowe za pomocą krótkich symulacji MCMC, aż do zbiegnięcia do optymalnej wartości.
+            -   **Cel:** Szybsza metoda optymalizacji `lengthscale`, mająca na celu znalezienie dobrej wartości przy mniejszym nakładzie obliczeniowym.
+
+        -   **`LenkAdaptiveSearchModel` (`Lenk_adaptive_search_model.py`):**
+            -   **Typ:** Rozszerzenie `LogisticNormalMCMC` o strojenie hiperparametru.
+            -   **Metoda:** Analogiczny do `BayesianFieldModelAdaptiveSearchBinary`, ale dostosowany do modelu `LogisticNormalMCMC`.
+            -   **Proces:** Wykorzystuje adaptacyjny algorytm wyszukiwania do znalezienia optymalnego `lengthscale` przed uruchomieniem finalnej, pełnej symulacji MCMC.
+            -   **Cel:** Efektywna optymalizacja hiperparametru `lengthscale` specjalnie dla modelu logistyczno-normalnego.
+    -   **`Pomocnicze/`**: Zawiera funkcje pomocnicze do obliczania metryk wydajności i generowania wizualizacji (map i wykresów).
+    -   **`Wyniki/`**: Odpowiada za zapisywanie wyników. Wszystkie dane z testów są dopisywane do jednego pliku `wyniki_testow.csv`, który pełni rolę bazy danych.
+
+**Przepływ Działania:**
+
+1.  Użytkownik uruchamia `BayesianModelSystem/app.py`.
+2.  Skrypt ładuje konfigurację i wywołuje główną funkcję w `program.py`.
+3.  `program.py` inicjalizuje `TestManager` i zleca mu wykonanie serii testów.
+4.  `TestManager` najpierw przygotowuje dane (siatkę i "prawdę podstawową") za pomocą modułu `Wczytywanie_danych`.
+5.  Dla każdego testu `TestManager` losuje nowy zestaw obserwacji.
+6.  Następnie iteruje po wybranych modelach z katalogu `Modele`, uruchamiając na każdym z nich proces dopasowania i predykcji.
+7.  Porównuje predykcje każdego modelu z "prawdą podstawową", oblicza metryki i zapisuje wszystko w pliku `wyniki_testow.csv` za pomocą `ResultsDatabase`.
+8.  Po zakończeniu eksperymentów mogą być generowane wykresy porównawcze i podsumowania statystyczne.
+
+**Testy i Scenariusze Eksperymentalne:**
+
+System został zaprojektowany do przeprowadzania trzech głównych rodzajów eksperymentów, które można selektywnie uruchamiać:
+
+1.  **Standardowe Testy Porównawcze (`run_tests`):**
+    *   **Cel:** Bezpośrednie porównanie wydajności różnych modeli w stałych, z góry określonych warunkach.
+    *   **Proces:**
+        *   Dla każdej z `n` iteracji testu, system losuje nowy zestaw `k` obserwacji z "prawdziwego" rozkładu.
+        *   Każdy ze skonfigurowanych modeli (`Dirichlet`, `BayesianFieldModel` z ustalonym `lengthscale`, modele adaptacyjne, itp.) jest uruchamiany na tym samym zestawie obserwacji.
+        *   Obliczane są metryki (np. MSE, MAE), porównujące predykcje każdego modelu z "prawdą podstawową".
+    *   **Przeznaczenie:** Ocena ogólnej dokładności i wydajności modeli w typowym scenariuszu.
+
+2.  **Test Wpływu Liczby Obserwacji (`test_observation_length_impact`):**
+    *   **Cel:** Zbadanie, jak zmienia się dokładność modeli wraz ze wzrostem liczby dostępnych danych (obserwacji).
+    *   **Proces:**
+        *   Test jest przeprowadzany dla rosnącej liczby obserwacji (np. od 10% do 90% wszystkich możliwych).
+        *   Dla każdego progu procentowego, wielokrotnie (`k` razy) losowany jest zestaw obserwacji o tej wielkości.
+        *   Na każdym zestawie uruchamiane są wybrane modele.
+        *   Wyniki są agregowane, aby pokazać trend wydajności modeli w funkcji gęstości danych.
+    *   **Przeznaczenie:** Analiza wrażliwości modeli na rzadkość danych i ocena, które z nich najlepiej radzą sobie przy ograniczonej informacji.
+
+3.  **Test Wpływu Wartości `lengthscale` (`test_lengthscale_impact`):**
+    *   **Cel:** Analiza, jak zmiana hiperparametru `lengthscale` (długość skali) wpływa na dokładność modeli przestrzennych (`BayesianFieldModel`, `LogisticNormalMCMC`).
+    *   **Proces:**
+        *   Test iteruje po liście predefiniowanych wartości `lengthscale`.
+        *   Dla każdej wartości `lengthscale`, uruchamiany jest model przestrzenny `k` razy na losowo wybranych zestawach obserwacji.
+        *   Wyniki pokazują, jak zmieniają się metryki błędu w zależności od `lengthscale`.
+    *   **Przeznaczenie:** Zrozumienie wrażliwości modeli na ten kluczowy hiperparametr i pomoc w jego ręcznym strojeniu. Pozwala to ocenić, czy automatyczne metody wyszukiwania (adaptacyjne i CV) faktycznie znajdują optymalny zakres.
+
+**Sekcja: Konfiguracja Systemu**
+
+Centralnym punktem konfiguracji jest plik `config/default_params.py`, który dostarcza domyślne ustawienia dla całego systemu.
+-   **`get_configuration()`**: Funkcja zwracająca słownik z całą konfiguracją.
+-   **`csv_path`**: Ścieżka do pliku CSV z danymi wejściowymi.
+-   **`base_params`**: Słownik zawierający podstawowe parametry przygotowania danych, takie jak `cutoff_km` (odległość od brzegu do odrzucenia punktów), `co_ktory` (współczynnik redukcji siatki) i `n_observations` (liczba losowanych obserwacji).
+-   **`models_to_test` / `impact_models_to_test`**: Listy modeli do uruchomienia w poszczególnych scenariuszach testowych. Każdy element listy to krotka `(nazwa_modelu, parametry_modelu)`.
+-   **`run_options`**: Słownik (`{"rt": True, "it": True, "lt": False}`) kontrolujący, które etapy testów (`rt` - regularne, `it` - wpływ obserwacji, `lt` - wpływ `lengthscale`) zostaną uruchomione.
+-   **`lengthscale_list`**: Lista wartości `lengthscale` do przetestowania w "Teście Wpływu Wartości `lengthscale`".
+
+**Sekcja: Przygotowanie Danych (Szczegółowo)**
+
+Proces przygotowania danych jest zorkiestrowany przez funkcję `przygotuj_dane` w `Wczytywanie_danych/preprocessing.py` i składa się z następujących kroków:
+1.  **`wczytaj_dane`**: Surowe dane o bogactwie gatunków morskich są wczytywane z pliku CSV i konwertowane na obiekt GeoDataFrame.
+2.  **`filtruj_pacyfik_i_brzeg`**: Ten krok wykonuje kluczowe filtrowanie:
+    *   **Filtrowanie geograficzne**: Punkty są ograniczane do predefiniowanego obszaru Pacyfiku.
+    *   **Usuwanie outlierów**: Punkty o ekstremalnie wysokiej lub niskiej liczbie gatunków (wykraczające poza 1.5-krotność rozstępu międzykwartylowego) są usuwane, aby uniknąć ich nieproporcjonalnego wpływu.
+    *   **Usuwanie strefy brzegowej**: Punkty znajdujące się zbyt blisko lądu (w odległości `cutoff_km`) są odrzucane.
+3.  **`zmniejsz_siatke`**: Aby zmniejszyć złożoność obliczeniową, siatka punktów jest redukowana poprzez wybranie co `co_ktory`-tego punktu.
+4.  **Tworzenie "Prawdy Podstawowej"**: Na podstawie finalnej, przefiltrowanej siatki, znormalizowana liczba gatunków (`Species Count`) jest traktowana jako "prawdziwy" rozkład prawdopodobieństwa (`true_probs`).
+5.  **`losuj_obserwacje`**: Z pełnej siatki losowana jest określona liczba (`n_observations`) indeksów punktów, które będą służyć jako "obserwacje" dla modeli.
+
+**Sekcja: Kluczowe Komponenty Pomocnicze**
+
+W pliku `Modele/bayesian_helpers.py` znajdują się fundamentalne, zoptymalizowane numerycznie funkcje, które stanowią rdzeń modeli przestrzennych:
+-   **`MultivariateNormalCholesky`**: Klasa do obsługi wielowymiarowego rozkładu normalnego. Zamiast operować na pełnej i kosztownej obliczeniowo macierzy kowariancji, dokonuje jej **rozkładu Cholesky'ego** (`L`). Pozwala to na bardzo szybkie obliczanie logarytmu gęstości prawdopodobieństwa (`logpdf`) i generowanie próbek.
+-   **`log_posterior_fast`**: Najważniejsza funkcja w pętli MCMC. Oblicza logarytm gęstości a posteriori, który jest sumą logarytmu priora (`lp`, z `MultivariateNormalCholesky`) i logarytmu wiarygodności danych (`ll`). Jest skrajnie zoptymalizowana za pomocą dekoratora `@njit` z biblioteki Numba, co kompiluje ją do szybkiego kodu maszynowego.
+-   **`x_from_w` / `w_from_x`**: Funkcje transformujące dane między przestrzenią latentną `w` a przestrzenią prawdopodobieństw `x`. Modele operują na nieograniczonej przestrzeni `w`, która następnie jest przekształcana na sumujące się do jedności prawdopodobieństwa `x`.
+
+**Sekcja: Ewaluacja i Zapisywanie Wyników**
+
+-   **Metryki Oceny (`oblicz_metryki`)**: Do oceny jakości predykcji modeli używane są standardowe metryki statystyczne:
+    -   **MSE** (Mean Squared Error): Średni błąd kwadratowy, silnie "karzący" duże błędy.
+    -   **MAE** (Mean Absolute Error): Średni błąd bezwzględny, bardziej intuicyjny.
+    -   **RMSE** (Root Mean Squared Error): Pierwiastek z MSE, wyrażony w tych samych jednostkach co dane.
+    -   **Korelacja**: Mierzy liniową zależność między predykcjami a prawdą.
+-   **Wizualizacje (`stworz_mape_porownawcza`)**: Generowane są mapy porównawcze, które wizualnie zestawiają "prawdziwy" rozkład prawdopodobieństwa z rozkładem predykowanym przez model, używając tej samej skali kolorów. Pozwala to na szybką, jakościową ocenę wyników.
+-   **Baza Danych Wyników (`results_db.py`)**: Wszystkie wyniki eksperymentów są skrupulatnie zapisywane w pliku `wyniki_testow.csv`. Każdy wiersz w tym pliku to wynik pojedynczego testu, zawierający:
+    -   Unikalne ID i czas wykonania testu.
+    -   Wszystkie parametry wejściowe (liczbę punktów, obserwacji, `lengthscale` itp.).
+    -   Kompletny zestaw metryk (MSE, MAE, korelacja...) dla **każdego** z testowanych modeli.
+    -   Czas wykonania testu.
+    Klasa `ResultsDatabase` pozwala również na generowanie prostych statystyk podsumowujących, np. średnie MSE dla każdego modelu we wszystkich testach.
